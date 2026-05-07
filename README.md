@@ -28,6 +28,16 @@ bun run test     # or: npm test  (Phase 6 — not yet configured)
 
 **React Compiler — skipped.** The compiler is designed for codebases that haven't manually applied `memo`/`useCallback`. This project does the opposite: explicit `React.memo` and stable callbacks are a deliberate architecture choice that demonstrates the optimization reasoning. Enabling the compiler on top would make that reasoning invisible.
 
+## CI
+
+A GitHub Actions workflow runs on every push to `main` and on every push to a pull request targeting `main`. The pipeline must pass before merging:
+
+1. **Install** — `bun install --frozen-lockfile`
+2. **Lint** — `biome check .` (formatting + lint rules)
+3. **Build** — `tsc -b && vite build` (type check + bundle)
+
+To enforce this as a merge gate, enable branch protection on `main` in GitHub Settings and require the `check` status to pass.
+
 ## Architecture
 
 _(TBD — folder map and sync pattern diagram once components are in place)_
@@ -68,6 +78,22 @@ So the design solves the problem at the layer it lives:
 | Scroll                     | 60 fps (browser skips paint for off-screen rows via `content-visibility`)                                               |
 
 **The discipline this requires:** `React.memo` is silently defeated by any unstable prop reference. Every callback handed to a row must be wrapped in `useCallback` with stable deps, and the row component must receive primitives, not objects. This is verifiable in the React DevTools Profiler — a name edit should highlight a single row, not the whole list.
+
+### Responsive side panel: persistent drawer, not temporary
+
+The side panel uses MUI's persistent drawer variant on small screens rather than temporary (modal). A temporary drawer overlays the canvas; a persistent one slides in and the canvas adjusts alongside it. This keeps the canvas visible and avoids the overlay pattern that makes the two areas feel unrelated.
+
+**Breakpoint behavior:**
+
+| Screen | Drawer variant | Panel width | Canvas |
+|--------|---------------|-------------|--------|
+| `xs` (< 600 px) | Persistent | `100vw` — full screen | Hidden behind panel when open |
+| `sm` – `md` (600 – 900 px) | Persistent | 320 px fixed | Remains visible |
+| `md`+ (> 900 px) | Permanent | 320 px fixed | Always alongside panel |
+
+The toggle button is hidden while the drawer is closing and only reappears once the exit transition finishes (`slotProps.transition.onExited`), avoiding a jarring overlap between the button and the sliding panel.
+
+The panel is wrapped in `<aside>` rather than being placed inside `<main>`. It is supplementary to the canvas (not primary content), which matches the semantic intent of `<aside>`. The canvas itself lives in `<main>`.
 
 ### GoJS layout: ForceDirected, capped, then frozen
 
