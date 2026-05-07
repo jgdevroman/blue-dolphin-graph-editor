@@ -52,7 +52,9 @@ export const GraphEditor = () => {
   }, []);
 
   const handleNameChange = useCallback((id: string, name: string) => {
-    setNodes((prev) => prev.map((node) => (node.id === id ? { ...node, name } : node)));
+    setNodes((prev) =>
+      prev.map((node) => (node.id === id ? { ...node, name } : node)),
+    );
     setNamePatch({ id, name });
   }, []);
 
