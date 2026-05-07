@@ -3,8 +3,8 @@ import IconButton from "@mui/material/IconButton";
 import { styled } from "@mui/material/styles";
 import { useState } from "react";
 import { Canvas } from "./Canvas";
-import { Slide } from "./Slide";
 import { SidePanel } from "./SidePanel";
+import { Slide } from "./Slide";
 
 const PANEL_WIDTH = 320;
 
@@ -43,7 +43,11 @@ export const GraphEditor = () => {
 
   return (
     <Box
-      sx={{ display: "flex", height: "100vh", bgcolor: "background.default" }}
+      sx={{
+        display: "flex",
+        height: "100vh",
+        bgcolor: "background.default",
+      }}
     >
       <Main open={open}>
         <IconButton

@@ -30,7 +30,13 @@ export const SidePanel = ({ onClose }: SidePanelProps) => (
       <Box sx={{ display: "flex", alignItems: "center", p: 1 }}>
         <Typography
           variant="overline"
-          sx={{ flexGrow: 1, px: 2, pt: 2, pb: 1, padding: "8px 8px" }}
+          sx={{
+            flexGrow: 1,
+            px: 2,
+            pt: 2,
+            pb: 1,
+            padding: "8px 8px",
+          }}
         >
           Nodes
         </Typography>
