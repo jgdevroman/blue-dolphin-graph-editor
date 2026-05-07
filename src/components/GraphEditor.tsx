@@ -1,8 +1,10 @@
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import { styled } from "@mui/material/styles";
-import { useState } from "react";
-import { Canvas } from "./Canvas";
+import { useCallback, useState } from "react";
+import { SEED_LINKS, SEED_NODES } from "../data/seedGraph";
+import type { NamePatch } from "../types/graph-editor";
+import { DiagramCanvas } from "./DiagramCanvas";
 import { SidePanel } from "./SidePanel";
 import { Slide } from "./Slide";
 
@@ -35,11 +37,24 @@ const Main = styled("main")<{ open?: boolean }>(({ theme, open }) => ({
 export const GraphEditor = () => {
   const [open, setOpen] = useState(false);
   const [drawerExited, setDrawerExited] = useState(true);
+  const [nodes, setNodes] = useState(SEED_NODES);
+  const [links] = useState(SEED_LINKS);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [namePatch, setNamePatch] = useState<NamePatch | null>(null);
 
   const handleOpen = () => {
     setDrawerExited(false);
     setOpen(true);
   };
+
+  const handleSelectionChange = useCallback((id: string | null) => {
+    setSelectedId(id);
+  }, []);
+
+  const handleNameChange = useCallback((id: string, name: string) => {
+    setNodes((prev) => prev.map((node) => (node.id === id ? { ...node, name } : node)));
+    setNamePatch({ id, name });
+  }, []);
 
   return (
     <Box
@@ -50,22 +65,38 @@ export const GraphEditor = () => {
       }}
     >
       <Main open={open}>
-        <IconButton
-          onClick={handleOpen}
-          aria-label="Open panel"
-          sx={{
-            display: drawerExited ? { xs: "flex", md: "none" } : "none",
-            position: "absolute",
-            top: 8,
-            right: 8,
-          }}
-        >
-          ☰
-        </IconButton>
-        <Canvas />
+        {drawerExited && (
+          <IconButton
+            onClick={handleOpen}
+            aria-label="Open panel"
+            sx={{
+              display: { xs: "flex", md: "none" },
+              position: "absolute",
+              top: 8,
+              right: 8,
+              zIndex: 10,
+            }}
+          >
+            ☰
+          </IconButton>
+        )}
+        <DiagramCanvas
+          nodes={nodes}
+          links={links}
+          selectedId={selectedId}
+          namePatch={namePatch}
+          onSelectionChange={handleSelectionChange}
+        />
       </Main>
       <Slide open={open} onExited={() => setDrawerExited(true)}>
-        <SidePanel onClose={() => setOpen(false)} />
+        <SidePanel
+          nodes={nodes}
+          links={links}
+          selectedId={selectedId}
+          onClose={() => setOpen(false)}
+          onSelect={setSelectedId}
+          onNameChange={handleNameChange}
+        />
       </Slide>
     </Box>
   );
