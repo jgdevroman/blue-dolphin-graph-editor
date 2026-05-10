@@ -2,18 +2,18 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import type { AppLink, AppNode } from "../types/graph";
 import { NodeList } from "./NodeList";
 import { PropertiesPanel } from "./PropertiesPanel";
 
 type Props = {
-  nodes: AppNode[];
-  links: AppLink[];
+  nodes: Map<string, AppNode>;
+  links: Map<string, AppLink>;
   selectedId: string | null;
   onClose: () => void;
   onSelect: (id: string) => void;
-  setNodes: React.Dispatch<React.SetStateAction<AppNode[]>>;
+  setNodes: React.Dispatch<React.SetStateAction<Map<string, AppNode>>>;
   setNamePatch: React.Dispatch<
     React.SetStateAction<{ id: string; name: string } | null>
   >;
@@ -27,13 +27,21 @@ export const SidePanel = ({
   setNodes,
   setNamePatch,
 }: Props) => {
-  const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
+  const selectedNode =
+    selectedId !== null ? (nodes.get(selectedId) ?? null) : null;
+  const nodeArray = useMemo(() => [...nodes.values()], [nodes]);
 
   const handleNameChange = useCallback(
     (id: string, name: string) => {
-      setNodes((prev) =>
-        prev.map((node) => (node.id === id ? { ...node, name } : node)),
-      );
+      setNodes((prev) => {
+        const existing = prev.get(id);
+        if (!existing) {
+          return prev;
+        }
+        const next = new Map(prev);
+        next.set(id, { ...existing, name });
+        return next;
+      });
       setNamePatch({ id, name });
     },
     [setNodes, setNamePatch],
@@ -81,7 +89,11 @@ export const SidePanel = ({
           </IconButton>
         </Box>
         <Divider />
-        <NodeList nodes={nodes} selectedId={selectedId} onSelect={onSelect} />
+        <NodeList
+          nodes={nodeArray}
+          selectedId={selectedId}
+          onSelect={onSelect}
+        />
       </Box>
 
       <Box sx={{ flex: "0 0 auto", borderTop: 1, borderColor: "divider" }}>

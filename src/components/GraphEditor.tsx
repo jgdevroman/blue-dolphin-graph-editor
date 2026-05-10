@@ -3,6 +3,7 @@ import IconButton from "@mui/material/IconButton";
 import { styled } from "@mui/material/styles";
 import { useState } from "react";
 import { SEED_LINKS, SEED_NODES } from "../data/seedGraph";
+import type { AppLink, AppNode } from "../types/graph";
 import type { NamePatch } from "../types/graph-editor";
 import { DiagramCanvas } from "./DiagramCanvas";
 import { SidePanel } from "./SidePanel";
@@ -37,8 +38,12 @@ const Main = styled("main")<{ open?: boolean }>(({ theme, open }) => ({
 export const GraphEditor = () => {
   const [open, setOpen] = useState(false);
   const [drawerExited, setDrawerExited] = useState(true);
-  const [nodes, setNodes] = useState(SEED_NODES);
-  const [links] = useState(SEED_LINKS);
+  const [nodes, setNodes] = useState<Map<string, AppNode>>(
+    () => new Map(SEED_NODES.map((node) => [node.id, node])),
+  );
+  const [links, setLinks] = useState<Map<string, AppLink>>(
+    () => new Map(SEED_LINKS.map((link) => [link.id, link])),
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [namePatch, setNamePatch] = useState<NamePatch | null>(null);
 
@@ -77,6 +82,8 @@ export const GraphEditor = () => {
           selectedId={selectedId}
           namePatch={namePatch}
           onSelectionChange={setSelectedId}
+          setNodes={setNodes}
+          setLinks={setLinks}
         />
       </Main>
       <Slide open={open} onExited={() => setDrawerExited(true)}>
