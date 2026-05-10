@@ -9,9 +9,9 @@ export const SEED_NODES: AppNode[] = [
 ];
 
 export const SEED_LINKS: AppLink[] = [
-  { from: "1", to: "2" },
-  { from: "2", to: "3" },
-  { from: "3", to: "4" },
-  { from: "4", to: "5" },
-  { from: "5", to: "1" },
+  { id: "l1", from: "1", to: "2" },
+  { id: "l2", from: "2", to: "3" },
+  { id: "l3", from: "3", to: "4" },
+  { id: "l4", from: "4", to: "5" },
+  { id: "l5", from: "5", to: "1" },
 ];
