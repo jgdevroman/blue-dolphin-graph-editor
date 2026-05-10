@@ -4,6 +4,7 @@ import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { useCallback, useMemo } from "react";
 import type { AppLink, AppNode } from "../types/graph";
+import { LoadingOverlay } from "./LoadingOverlay";
 import { NodeList } from "./NodeList";
 import { PropertiesPanel } from "./PropertiesPanel";
 
@@ -11,6 +12,7 @@ type Props = {
   nodes: Map<string, AppNode>;
   links: Map<string, AppLink>;
   selectedId: string | null;
+  isLoading: boolean;
   onClose: () => void;
   onSelect: (id: string) => void;
   setNodes: React.Dispatch<React.SetStateAction<Map<string, AppNode>>>;
@@ -22,6 +24,7 @@ type Props = {
 export const SidePanel = ({
   nodes,
   selectedId,
+  isLoading,
   onClose,
   onSelect,
   setNodes,
@@ -52,6 +55,7 @@ export const SidePanel = ({
       sx={{
         width: "100%",
         height: "100%",
+        position: "relative",
         display: "flex",
         flexDirection: "column",
         borderLeft: 1,
@@ -96,6 +100,7 @@ export const SidePanel = ({
         />
       </Box>
 
+      {isLoading && <LoadingOverlay />}
       <Box sx={{ flex: "0 0 auto", borderTop: 1, borderColor: "divider" }}>
         <Typography variant="overline" sx={{ px: 2, pt: 2, pb: 1 }}>
           Properties

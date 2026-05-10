@@ -99,6 +99,21 @@ The panel is wrapped in `<aside>` rather than being placed inside `<main>`. It i
 
 `DiagramWrapper` follows the same component split used in the official `gojs-react-basic` example. The wrapper owns everything that only needs to run once: `initDiagram` (the GoJS diagram factory) and the `ChangedSelection` listener setup, both in effects with `[]` deps. `DiagramCanvas` sits above it and owns the React state and business logic, accessing the diagram instance through the `diagramRef` prop it passes down. This keeps GoJS initialization concerns out of the stateful layer and makes both components easier to reason about in isolation.
 
+### Canvas-driven node and link creation: GoJS built-in tools, synced via `onModelChange`
+
+Node and link creation is handled entirely by GoJS built-in tools, not by React event handlers:
+
+- **Node creation** — `clickCreatingTool.archetypeNodeData` stamps a node into the GoJS model on background double-click. No custom event listener is needed.
+- **Link creation** — the `LinkingTool` activates automatically when the user drags from a node's border. This requires `portId: ""` on the shape; without it, GoJS does not recognize the shape as a port and the tool never starts.
+
+GoJS fires `onModelChange` (via `go.IncrementalData`) after every model transaction. `DiagramCanvas.handleModelChange` reads `insertedNodeKeys` / `insertedLinkKeys` and the accompanying `modifiedNodeData` / `modifiedLinkData` to sync new items into React state. `setSkipsDiagramUpdate(true)` is set immediately after so ReactDiagram does not push the same data back into GoJS on the following re-render.
+
+The `onModelChange` also fires during the initial model load when ReactDiagram first seeds GoJS with the `nodeDataArray` prop. Without a guard this would double-add all seed nodes. The fix is an existence check in the updater: if the id is already in `prev`, return `prev` unchanged.
+
+### Undirected graph enforcement: `linkValidation` on the `LinkingTool`
+
+`diagram.toolManager.linkingTool.linkValidation` is set to a function that calls `fromNode.findLinksBetween(toNode)`. This method counts links in both directions, so attempting to draw B→A when A→B already exists is rejected. Self-links (same node as source and target) are also rejected in the same check. This keeps the graph undirected without needing to inspect link direction at all.
+
 ### GoJS layout: ForceDirected, capped, then frozen
 
 _(TBD — to be filled in during Phase 5)_
@@ -106,6 +121,22 @@ _(TBD — to be filled in during Phase 5)_
 ### Barabási-Albert topology for the seed graph
 
 _(TBD — to be filled in during Phase 5)_
+
+### Node and link state: `Map<string, T>`, not arrays
+
+`nodes` and `links` in `GraphEditor` are `Map<string, AppNode>` and `Map<string, AppLink>` keyed by id, not arrays.
+
+The core reason is lookup cost. Several operations need to answer "does this id already exist?":
+
+- `handleModelChange` deduplicates insertions from GoJS before adding them to state.
+- `SidePanel` resolves the selected node from `selectedId`.
+- `handleNameChange` finds the node to update.
+
+With an array every one of these is O(n). At 1000 nodes that is a measurable pause on every selection change and every keystroke in the name field. With a Map all three are O(1).
+
+GoJS and `NodeList` still need arrays. The conversion is done once with `useMemo(() => [...nodes.values()], [nodes])` at the component that owns the prop, so the spread only runs when the map actually changes, not on every render.
+
+Seed data in `seedGraph.ts` stays as arrays (plain data, no lookup need). `GraphEditor` hydrates them into Maps on initialization: `new Map(SEED_NODES.map(n => [n.id, n]))`.
 
 ### Single source of truth in React state, feedback-loop guard
 

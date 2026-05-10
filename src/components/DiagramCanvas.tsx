@@ -12,7 +12,8 @@ type Props = {
   links: Map<string, AppLink>;
   selectedId: string | null;
   namePatch: NamePatch | null;
-  onSelectionChange: (id: string | null) => void;
+  onInitialLayoutCompleted: () => void;
+  setSelectedId: (id: string | null) => void;
   setNodes: React.Dispatch<React.SetStateAction<Map<string, AppNode>>>;
   setLinks: React.Dispatch<React.SetStateAction<Map<string, AppLink>>>;
 };
@@ -22,20 +23,30 @@ export const DiagramCanvas = ({
   links,
   selectedId,
   namePatch,
-  onSelectionChange,
+  onInitialLayoutCompleted,
+  setSelectedId,
   setNodes,
   setLinks,
 }: Props) => {
   const diagramRef = useRef<ReactDiagram | null>(null);
   const [skipsDiagramUpdate, setSkipsDiagramUpdate] = useState(false);
+  const suppressNextSelectionEventRef = useRef(false);
 
   /**
    * Handles ChangedSelection events from GoJS, pushing the selected node id into React state.
    */
   const handleChangedSelection = (e: go.DiagramEvent) => {
+    // if the selection change originated from React pushing selectedId into GoJS, do not update React state again and cause a loop.
+    if (suppressNextSelectionEventRef.current) {
+      suppressNextSelectionEventRef.current = false;
+      setSkipsDiagramUpdate(false);
+      return;
+    }
+
     setSkipsDiagramUpdate(true);
+    suppressNextSelectionEventRef.current = true;
     const firstSelected = e.subject.first();
-    onSelectionChange(
+    setSelectedId(
       firstSelected instanceof go.Node ? String(firstSelected.key) : null,
     );
   };
@@ -93,7 +104,9 @@ export const DiagramCanvas = ({
 
   // Push selectedId from React into GoJS, skipping when GoJS drove the change.
   useEffect(() => {
-    if (skipsDiagramUpdate) {
+    // if the change originated from GoJS, do not push it back in and cause a loop.
+    if (suppressNextSelectionEventRef.current) {
+      suppressNextSelectionEventRef.current = false;
       setSkipsDiagramUpdate(false);
       return;
     }
@@ -106,10 +119,12 @@ export const DiagramCanvas = ({
     } else {
       const node = diagram.findNodeForKey(selectedId);
       if (node) {
+        suppressNextSelectionEventRef.current = true;
         diagram.select(node);
+        diagram.centerRect(node.actualBounds);
       }
     }
-  }, [selectedId, skipsDiagramUpdate]);
+  }, [selectedId]);
 
   // Patch a single node name in GoJS without touching the rest of the model.
   useEffect(() => {
@@ -139,6 +154,7 @@ export const DiagramCanvas = ({
       skipsDiagramUpdate={skipsDiagramUpdate}
       onChangedSelection={handleChangedSelection}
       onModelChange={handleModelChange}
+      onInitialLayoutCompleted={onInitialLayoutCompleted}
     />
   );
 };

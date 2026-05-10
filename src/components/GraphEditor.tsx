@@ -1,11 +1,12 @@
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import { styled } from "@mui/material/styles";
-import { useState } from "react";
-import { SEED_LINKS, SEED_NODES } from "../data/seedGraph";
+import { useCallback, useState } from "react";
 import type { AppLink, AppNode } from "../types/graph";
 import type { NamePatch } from "../types/graph-editor";
+import { GENERATED_GRAPH } from "../utils/graphUtils";
 import { DiagramCanvas } from "./DiagramCanvas";
+import { LoadingOverlay } from "./LoadingOverlay";
 import { SidePanel } from "./SidePanel";
 import { Slide } from "./Slide";
 
@@ -39,13 +40,18 @@ export const GraphEditor = () => {
   const [open, setOpen] = useState(false);
   const [drawerExited, setDrawerExited] = useState(true);
   const [nodes, setNodes] = useState<Map<string, AppNode>>(
-    () => new Map(SEED_NODES.map((node) => [node.id, node])),
+    () => new Map(GENERATED_GRAPH.nodes.map((node) => [node.id, node])),
   );
   const [links, setLinks] = useState<Map<string, AppLink>>(
-    () => new Map(SEED_LINKS.map((link) => [link.id, link])),
+    () => new Map(GENERATED_GRAPH.links.map((link) => [link.id, link])),
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [namePatch, setNamePatch] = useState<NamePatch | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const handleInitialLayoutCompleted = useCallback(() => {
+    setIsLoading(false);
+  }, []);
 
   const handleOpen = () => {
     setDrawerExited(false);
@@ -81,16 +87,19 @@ export const GraphEditor = () => {
           links={links}
           selectedId={selectedId}
           namePatch={namePatch}
-          onSelectionChange={setSelectedId}
+          setSelectedId={setSelectedId}
+          onInitialLayoutCompleted={handleInitialLayoutCompleted}
           setNodes={setNodes}
           setLinks={setLinks}
         />
+        {isLoading && <LoadingOverlay />}
       </Main>
       <Slide open={open} onExited={() => setDrawerExited(true)}>
         <SidePanel
           nodes={nodes}
           links={links}
           selectedId={selectedId}
+          isLoading={isLoading}
           onClose={() => setOpen(false)}
           onSelect={setSelectedId}
           setNodes={setNodes}
