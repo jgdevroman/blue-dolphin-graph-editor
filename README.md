@@ -95,6 +95,10 @@ The toggle button is hidden while the drawer is closing and only reappears once 
 
 The panel is wrapped in `<aside>` rather than being placed inside `<main>`. It is supplementary to the canvas (not primary content), which matches the semantic intent of `<aside>`. The canvas itself lives in `<main>`.
 
+### DiagramWrapper pattern: initialization separate from UI logic
+
+`DiagramWrapper` follows the same component split used in the official `gojs-react-basic` example. The wrapper owns everything that only needs to run once: `initDiagram` (the GoJS diagram factory) and the `ChangedSelection` listener setup, both in effects with `[]` deps. `DiagramCanvas` sits above it and owns the React state and business logic, accessing the diagram instance through the `diagramRef` prop it passes down. This keeps GoJS initialization concerns out of the stateful layer and makes both components easier to reason about in isolation.
+
 ### GoJS layout: ForceDirected, capped, then frozen
 
 _(TBD — to be filled in during Phase 5)_
@@ -105,7 +109,23 @@ _(TBD — to be filled in during Phase 5)_
 
 ### Single source of truth in React state, feedback-loop guard
 
-_(TBD — to be filled in during Phase 3)_
+React state (`nodes`, `links`, `selectedId`) is the single source of truth. GoJS is a controlled output — it receives data and reports events, but never owns state. This means:
+
+- **No duplicated state.** The node list and the diagram canvas both read from the same `nodes` array in `GraphEditor`. There is no separate GoJS-side model that needs to be kept in sync manually.
+- **Unidirectional data flow for selection.** When the user clicks a node on the canvas, GoJS fires `ChangedSelection`, which calls `onSelectionChange`, which calls `setSelectedId` in `GraphEditor`. React re-renders, passes the new `selectedId` down to both `NodeList` (highlights the row) and `DiagramWrapper` (selects the node in GoJS). The flow is always: GoJS event → React state → React render → GoJS update.
+
+**Feedback-loop guard:** Without a guard, the selection sync creates an infinite loop. GoJS fires `ChangedSelection` → React sets `selectedId` → the `selectedId` effect runs → GoJS selects the node → GoJS fires `ChangedSelection` again → repeat. The guard is a single `isUpdatingFromDiagram` ref. The `ChangedSelection` handler sets it to `true` before calling `onSelectionChange` and back to `false` after. The `selectedId` effect checks it at the top and returns early if set, breaking the cycle.
+
+**Name edit sync: O(1) via `NamePatch`**
+
+Typing in the name field calls `handleNameChange(id, name)` which does two things in parallel:
+
+1. Updates the `nodes` array in React state (so `NodeList` reflects the new name instantly).
+2. Sets a `namePatch: { id, name }` state (a lightweight object carrying just the changed key and value).
+
+`DiagramWrapper` has a dedicated effect on `namePatch` that calls `diagram.model.setDataProperty(nodeData, "name", namePatch.name)` — a single O(1) hash lookup into the GoJS model. Only the affected node re-renders in GoJS. The rest of the diagram is untouched.
+
+This avoids the naive alternative of replacing the entire `nodeDataArray` on every keystroke, which would cause GoJS to tear down and rebuild all node visuals.
 
 ---
 
