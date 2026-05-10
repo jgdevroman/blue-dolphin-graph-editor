@@ -1,38 +1,44 @@
 import * as go from "gojs";
-import { useEffect, useRef } from "react";
+import { ReactDiagram } from "gojs-react";
+import { type RefObject, useEffect } from "react";
 import type { AppLink, AppNode } from "../types/graph";
-import type { NamePatch } from "../types/graph-editor";
 
 type Props = {
-  nodes: AppNode[];
-  links: AppLink[];
-  selectedId: string | null;
-  namePatch: NamePatch | null;
-  onSelectionChange: (id: string | null) => void;
+  diagramRef: RefObject<ReactDiagram | null>;
+  nodeDataArray: AppNode[];
+  linkDataArray: AppLink[];
+  skipsDiagramUpdate: boolean;
+  onDiagramEvent: (e: go.DiagramEvent) => void;
+  onModelChange: () => void;
 };
 
 export const DiagramWrapper = ({
-  nodes,
-  links,
-  selectedId,
-  namePatch,
-  onSelectionChange,
+  diagramRef,
+  nodeDataArray,
+  linkDataArray,
+  skipsDiagramUpdate,
+  onDiagramEvent,
+  onModelChange,
 }: Props) => {
-  const divRef = useRef<HTMLDivElement>(null);
-  const diagramRef = useRef<go.Diagram | null>(null);
-  const isUpdatingFromDiagram = useRef(false);
-  const initialNodesRef = useRef(nodes);
-  const initialLinksRef = useRef(links);
-
-  // Initialize the GoJS diagram once on mount and wire up event listeners.
+  // Add/remove listener on mount only.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: handler is stable (setSelectedId)
   useEffect(() => {
-    if (!divRef.current) {
-      return;
+    const diagram = diagramRef.current?.getDiagram();
+    if (diagram instanceof go.Diagram) {
+      diagram.addDiagramListener("ChangedSelection", onDiagramEvent);
     }
+    return () => {
+      if (diagram instanceof go.Diagram) {
+        diagram.removeDiagramListener("ChangedSelection", onDiagramEvent);
+      }
+    };
+  }, []);
 
-    const diagram = new go.Diagram(divRef.current, {
+  const initDiagram = (): go.Diagram => {
+    const diagram = new go.Diagram({
       "undoManager.isEnabled": true,
       initialContentAlignment: go.Spot.Center,
+      model: new go.GraphLinksModel({ nodeKeyProperty: "id" }),
     });
 
     diagram.nodeTemplate = new go.Node("Auto").add(
@@ -48,67 +54,18 @@ export const DiagramWrapper = ({
 
     diagram.linkTemplate = new go.Link().add(new go.Shape());
 
-    diagram.model = new go.GraphLinksModel({
-      nodeKeyProperty: "id",
-      nodeDataArray: [],
-      linkDataArray: [],
-    });
+    return diagram;
+  };
 
-    diagram.addDiagramListener("ChangedSelection", () => {
-      if (isUpdatingFromDiagram.current) {
-        return;
-      }
-      isUpdatingFromDiagram.current = true;
-      const firstSelected = diagram.selection.first();
-      onSelectionChange(
-        firstSelected instanceof go.Node ? String(firstSelected.key) : null,
-      );
-      isUpdatingFromDiagram.current = false;
-    });
-
-    // Load initial data once
-    diagram.model.commit((model) => {
-      const graphModel = model as go.GraphLinksModel;
-      graphModel.nodeDataArray = initialNodesRef.current.map((node) => ({
-        ...node,
-      }));
-      graphModel.linkDataArray = initialLinksRef.current.map((link) => ({
-        ...link,
-      }));
-    }, "initial-load");
-
-    diagramRef.current = diagram;
-
-    return () => {
-      diagram.div = null;
-    };
-  }, [onSelectionChange]);
-
-  // Patch a single node name in GoJS without touching the rest of the model.
-  useEffect(() => {
-    if (!namePatch) return;
-    const diagram = diagramRef.current;
-    if (!diagram) return;
-    diagram.model.commit((model) => {
-      const nodeData = model.findNodeDataForKey(namePatch.id);
-      if (nodeData) model.setDataProperty(nodeData, "name", namePatch.name);
-    }, "patch-name");
-  }, [namePatch]);
-
-  // Push selectedId from React into GoJS selection, skipping if GoJS triggered the change.
-  useEffect(() => {
-    const diagram = diagramRef.current;
-    if (!diagram || isUpdatingFromDiagram.current) {
-      return;
-    }
-
-    if (selectedId === null) {
-      diagram.clearSelection();
-    } else {
-      const node = diagram.findNodeForKey(selectedId);
-      if (node) diagram.select(node);
-    }
-  }, [selectedId]);
-
-  return <div ref={divRef} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <ReactDiagram
+      ref={diagramRef}
+      divClassName="diagram-canvas"
+      initDiagram={initDiagram}
+      nodeDataArray={nodeDataArray}
+      linkDataArray={linkDataArray}
+      onModelChange={onModelChange}
+      skipsDiagramUpdate={skipsDiagramUpdate}
+    />
+  );
 };

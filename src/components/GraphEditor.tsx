@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import { styled } from "@mui/material/styles";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { SEED_LINKS, SEED_NODES } from "../data/seedGraph";
 import type { NamePatch } from "../types/graph-editor";
 import { DiagramCanvas } from "./DiagramCanvas";
@@ -47,17 +47,6 @@ export const GraphEditor = () => {
     setOpen(true);
   };
 
-  const handleSelectionChange = useCallback((id: string | null) => {
-    setSelectedId(id);
-  }, []);
-
-  const handleNameChange = useCallback((id: string, name: string) => {
-    setNodes((prev) =>
-      prev.map((node) => (node.id === id ? { ...node, name } : node)),
-    );
-    setNamePatch({ id, name });
-  }, []);
-
   return (
     <Box
       sx={{
@@ -87,7 +76,7 @@ export const GraphEditor = () => {
           links={links}
           selectedId={selectedId}
           namePatch={namePatch}
-          onSelectionChange={handleSelectionChange}
+          onSelectionChange={setSelectedId}
         />
       </Main>
       <Slide open={open} onExited={() => setDrawerExited(true)}>
@@ -97,7 +86,8 @@ export const GraphEditor = () => {
           selectedId={selectedId}
           onClose={() => setOpen(false)}
           onSelect={setSelectedId}
-          onNameChange={handleNameChange}
+          setNodes={setNodes}
+          setNamePatch={setNamePatch}
         />
       </Slide>
     </Box>

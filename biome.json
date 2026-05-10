@@ -26,7 +26,8 @@
           "options": { "syntax": "shorthand" }
         },
         "useTemplate": "warn",
-        "noNonNullAssertion": "warn"
+        "noNonNullAssertion": "warn",
+        "useBlockStatements": "error"
       },
       "correctness": {
         "noUnusedImports": "warn",

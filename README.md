@@ -95,6 +95,10 @@ The toggle button is hidden while the drawer is closing and only reappears once 
 
 The panel is wrapped in `<aside>` rather than being placed inside `<main>`. It is supplementary to the canvas (not primary content), which matches the semantic intent of `<aside>`. The canvas itself lives in `<main>`.
 
+### DiagramWrapper pattern: initialization separate from UI logic
+
+`DiagramWrapper` follows the same component split used in the official `gojs-react-basic` example. The wrapper owns everything that only needs to run once: `initDiagram` (the GoJS diagram factory) and the `ChangedSelection` listener setup, both in effects with `[]` deps. `DiagramCanvas` sits above it and owns the React state and business logic, accessing the diagram instance through the `diagramRef` prop it passes down. This keeps GoJS initialization concerns out of the stateful layer and makes both components easier to reason about in isolation.
+
 ### GoJS layout: ForceDirected, capped, then frozen
 
 _(TBD — to be filled in during Phase 5)_

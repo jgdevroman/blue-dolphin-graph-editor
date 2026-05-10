@@ -2,6 +2,7 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
+import { useCallback } from "react";
 import type { AppLink, AppNode } from "../types/graph";
 import { NodeList } from "./NodeList";
 import { PropertiesPanel } from "./PropertiesPanel";
@@ -12,7 +13,10 @@ type Props = {
   selectedId: string | null;
   onClose: () => void;
   onSelect: (id: string) => void;
-  onNameChange: (id: string, name: string) => void;
+  setNodes: React.Dispatch<React.SetStateAction<AppNode[]>>;
+  setNamePatch: React.Dispatch<
+    React.SetStateAction<{ id: string; name: string } | null>
+  >;
 };
 
 export const SidePanel = ({
@@ -20,9 +24,20 @@ export const SidePanel = ({
   selectedId,
   onClose,
   onSelect,
-  onNameChange,
+  setNodes,
+  setNamePatch,
 }: Props) => {
   const selectedNode = nodes.find((node) => node.id === selectedId) ?? null;
+
+  const handleNameChange = useCallback(
+    (id: string, name: string) => {
+      setNodes((prev) =>
+        prev.map((node) => (node.id === id ? { ...node, name } : node)),
+      );
+      setNamePatch({ id, name });
+    },
+    [setNodes, setNamePatch],
+  );
 
   return (
     <Box
@@ -74,7 +89,7 @@ export const SidePanel = ({
           Properties
         </Typography>
         <Divider />
-        <PropertiesPanel node={selectedNode} onNameChange={onNameChange} />
+        <PropertiesPanel node={selectedNode} onNameChange={handleNameChange} />
       </Box>
     </Box>
   );
