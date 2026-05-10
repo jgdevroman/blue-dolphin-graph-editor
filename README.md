@@ -114,6 +114,39 @@ The `onModelChange` also fires during the initial model load when ReactDiagram f
 
 `diagram.toolManager.linkingTool.linkValidation` is set to a function that calls `fromNode.findLinksBetween(toNode)`. This method counts links in both directions, so attempting to draw B→A when A→B already exists is rejected. Self-links (same node as source and target) are also rejected in the same check. This keeps the graph undirected without needing to inspect link direction at all.
 
+### Selection sync: scroll-to-node in list and canvas jump
+
+Selecting a node from either the side panel list or the canvas keeps the other surface in sync. Two separate behaviors are involved: scrolling the list row into view, and panning the canvas to center on the node.
+
+**List scroll on selection**
+
+`NodeList` holds a `ref` on the MUI `<List>` element and a `useEffect` on `selectedId`. When `selectedId` changes the effect queries `[data-node-id="${selectedId}"]` inside the list and calls `scrollIntoView({ block: "center" })`. The `data-node-id` attribute is set on each `NodeRow`'s `<ListItem>`.
+
+The scroll is suppressed when the selection originated from the list itself (clicking a row). A `selectedFromList` state flag is set in the row's `onClick` and checked at the top of the effect. Using state rather than a ref here means the flag read is correctly captured in the effect closure; the flag is reset on every effect run regardless of path.
+
+**Canvas pan on panel selection**
+
+`DiagramCanvas` calls `diagram.centerRect(node.actualBounds)` inside the `selectedId` effect when syncing React state into GoJS. This is only reached when `skipsDiagramUpdate` is `false`, meaning the selection was driven from React (the panel), not from a canvas click. Canvas-click selections set `skipsDiagramUpdate = true` in `handleChangedSelection`, which causes the effect to return early before reaching `centerRect`.
+
+**Two-ref guard architecture**
+
+The two-way sync between React and GoJS requires two separate guards. They serve opposite directions and have different timing constraints:
+
+| Guard | Type | Set by | Read by | Purpose |
+|---|---|---|---|---|
+| `skipsDiagramUpdate` | state | `handleChangedSelection`, `handleModelChange` | selection sync effect | Prevents `centerRect` from running when GoJS drove the selection. Also passed as prop to `ReactDiagram` to prevent it from re-applying `nodeDataArray` back into GoJS after model mutations. |
+| `suppressNextSelectionEventRef` | ref | selection sync effect (before `diagram.select()`) | `handleChangedSelection` | Suppresses the echo `ChangedSelection` event GoJS fires synchronously during `diagram.select()`, which would otherwise set `skipsDiagramUpdate = true` and corrupt the next panel selection. |
+
+`suppressNextSelectionEventRef` must be a ref, not state, because GoJS fires `ChangedSelection` synchronously inside the `diagram.select()` call, before the current effect returns. Any state update set before `diagram.select()` would not be visible in the handler's closure at that moment.
+
+`skipsDiagramUpdate` must remain state because it is passed as a prop to `ReactDiagram`. A ref change does not trigger a re-render, so `ReactDiagram` would never see the updated value and would re-apply `nodeDataArray` into GoJS after every model mutation, causing duplicate nodes and links.
+
+**The double-fire bug and why `skipsDiagramUpdate` is not a dependency of the selection effect**
+
+The selection sync effect depends only on `selectedId`, not on `skipsDiagramUpdate`. If `skipsDiagramUpdate` were in the dependency array, removing it from the array would cause the effect to fire twice on every canvas click: once when `selectedId` changes (sees `skipsDiagramUpdate = true`, resets it, returns early), then again when `skipsDiagramUpdate` resets to `false` (now falls through to `diagram.select()` and `centerRect`). The biome exhaustive-deps rule is suppressed with an explanation at the call site.
+
+---
+
 ### GoJS layout: ForceDirected, capped, then frozen
 
 _(TBD — to be filled in during Phase 5)_
@@ -122,21 +155,29 @@ _(TBD — to be filled in during Phase 5)_
 
 _(TBD — to be filled in during Phase 5)_
 
-### Node and link state: `Map<string, T>`, not arrays
+### Node and link state: arrays in state, index maps as refs
 
-`nodes` and `links` in `GraphEditor` are `Map<string, AppNode>` and `Map<string, AppLink>` keyed by id, not arrays.
+`nodes` and `links` in `GraphEditor` are `AppNode[]` and `AppLink[]` arrays. Alongside them, two `useRef<Map<string, number>>` refs (`nodeIndexRef`, `linkIndexRef`) map each id to its position in the array.
 
-The core reason is lookup cost. Several operations need to answer "does this id already exist?":
+**Why arrays in state, not `Map<string, T>`**
 
-- `handleModelChange` deduplicates insertions from GoJS before adding them to state.
-- `SidePanel` resolves the selected node from `selectedId`.
-- `handleNameChange` finds the node to update.
+The initial implementation stored nodes and links as `Map<string, AppNode>` and `Map<string, AppLink>` in React state. GoJS and `NodeList` both need arrays, so every render that consumed the data ran `useMemo(() => [...nodes.values()], [nodes])` to convert — one spread per consumer per state change. With arrays in state, those conversions disappear entirely. The data is already in the shape every consumer needs.
 
-With an array every one of these is O(n). At 1000 nodes that is a measurable pause on every selection change and every keystroke in the name field. With a Map all three are O(1).
+**Why `useRef` for the index maps, not state or module-level variables**
 
-GoJS and `NodeList` still need arrays. The conversion is done once with `useMemo(() => [...nodes.values()], [nodes])` at the component that owns the prop, so the spread only runs when the map actually changes, not on every render.
+Three options were considered:
 
-Seed data in `seedGraph.ts` stays as arrays (plain data, no lookup need). `GraphEditor` hydrates them into Maps on initialization: `new Map(SEED_NODES.map(n => [n.id, n]))`.
+| Option | Triggers re-render | Per-instance |
+|---|---|---|
+| `useState` | Yes | Yes |
+| `useRef` | No | Yes |
+| Module-level variable | No | No (shared across all instances) |
+
+The index maps are a derived lookup cache, not source-of-truth data. Mutating them should not trigger re-renders. Module-level variables would be shared if `GraphEditor` were ever mounted more than once (tests, multi-panel layouts). `useRef` gives per-instance mutable storage that is invisible to React's render cycle.
+
+**O(1) lookups**
+
+Operations that previously needed `map.get(id)` now use `nodes[nodeIndexRef.current.get(id)]` — still O(1). For insertions, the index map is appended with the new item's position (`prev.length`) inside the state updater before returning the new array. For deletions (not yet implemented), a full index rebuild via `refreshNodeIndex`/`refreshLinkIndex` is in place.
 
 ### Single source of truth in React state, feedback-loop guard
 
@@ -154,9 +195,22 @@ Typing in the name field calls `handleNameChange(id, name)` which does two thing
 1. Updates the `nodes` array in React state (so `NodeList` reflects the new name instantly).
 2. Sets a `namePatch: { id, name }` state (a lightweight object carrying just the changed key and value).
 
-`DiagramWrapper` has a dedicated effect on `namePatch` that calls `diagram.model.setDataProperty(nodeData, "name", namePatch.name)` — a single O(1) hash lookup into the GoJS model. Only the affected node re-renders in GoJS. The rest of the diagram is untouched.
+`DiagramCanvas` has a dedicated effect on `namePatch` that calls `diagram.model.setDataProperty(nodeData, "name", namePatch.name)` — a single O(1) hash lookup into the GoJS model. Only the affected node re-renders in GoJS. The rest of the diagram is untouched.
 
 This avoids the naive alternative of replacing the entire `nodeDataArray` on every keystroke, which would cause GoJS to tear down and rebuild all node visuals.
+
+**Investigation: blocking ReactDiagram's `shouldComponentUpdate` during name patches**
+
+An attempt was made to add `skipsDiagramUpdate || namePatch !== null` when passing `skipsDiagramUpdate` to `ReactDiagram`, reasoning that if a targeted patch was already handling the GoJS update, the full `mergeData` path via `shouldComponentUpdate` could be skipped. This was rejected for two reasons:
+
+1. `namePatch !== null` is too broad — it would block ReactDiagram from updating for any reason while a patch is pending, including legitimate unrelated changes.
+2. `ReactDiagram.shouldComponentUpdate` already guards against redundant syncs by comparing `nodeDataArray` and `linkDataArray` by reference. The `mergeData` call that follows is fast when GoJS's internal model already reflects the change from the targeted patch. React DevTools profiling confirmed no unnecessary re-renders were occurring without the extra guard.
+
+Separately, clearing `namePatch` to `null` after each effect (via `setNamePatch(null)`) was also tried and rejected. It caused the namePatch effect to fire a second time with `null` as the value — an extra render and effect call with no benefit since the effect already guards with `if (!namePatch) return`.
+
+**Selection deferral: `startTransition` on canvas-driven selection**
+
+When the user clicks a node in the GoJS canvas, `handleChangedSelection` wraps `setSelectedId` in `startTransition`. The canvas selection highlight is handled by GoJS itself synchronously. The `selectedId` state update, which triggers `NodeList` to re-render and highlight the corresponding row, is lower priority and can be deferred. This keeps the canvas interaction feeling immediate even while 1000 list rows reconcile in the background.
 
 ---
 

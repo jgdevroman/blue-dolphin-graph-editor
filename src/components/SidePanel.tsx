@@ -2,20 +2,21 @@ import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import type { AppLink, AppNode } from "../types/graph";
 import { LoadingOverlay } from "./LoadingOverlay";
 import { NodeList } from "./NodeList";
 import { PropertiesPanel } from "./PropertiesPanel";
 
 type Props = {
-  nodes: Map<string, AppNode>;
-  links: Map<string, AppLink>;
+  nodes: AppNode[];
+  links: AppLink[];
+  nodeIndexRef: React.RefObject<Map<string, number>>;
   selectedId: string | null;
   isLoading: boolean;
   onClose: () => void;
   onSelect: (id: string) => void;
-  setNodes: React.Dispatch<React.SetStateAction<Map<string, AppNode>>>;
+  setNodes: React.Dispatch<React.SetStateAction<AppNode[]>>;
   setNamePatch: React.Dispatch<
     React.SetStateAction<{ id: string; name: string } | null>
   >;
@@ -23,6 +24,7 @@ type Props = {
 
 export const SidePanel = ({
   nodes,
+  nodeIndexRef,
   selectedId,
   isLoading,
   onClose,
@@ -31,23 +33,24 @@ export const SidePanel = ({
   setNamePatch,
 }: Props) => {
   const selectedNode =
-    selectedId !== null ? (nodes.get(selectedId) ?? null) : null;
-  const nodeArray = useMemo(() => [...nodes.values()], [nodes]);
+    selectedId !== null
+      ? (nodes[nodeIndexRef.current.get(selectedId) ?? -1] ?? null)
+      : null;
 
   const handleNameChange = useCallback(
     (id: string, name: string) => {
       setNodes((prev) => {
-        const existing = prev.get(id);
-        if (!existing) {
+        const nodeIndex = nodeIndexRef.current.get(id);
+        if (nodeIndex === undefined) {
           return prev;
         }
-        const next = new Map(prev);
-        next.set(id, { ...existing, name });
+        const next = [...prev];
+        next[nodeIndex] = { ...prev[nodeIndex], name };
         return next;
       });
       setNamePatch({ id, name });
     },
-    [setNodes, setNamePatch],
+    [setNodes, setNamePatch, nodeIndexRef],
   );
 
   return (
@@ -94,7 +97,7 @@ export const SidePanel = ({
         </Box>
         <Divider />
         <NodeList
-          nodes={nodeArray}
+          nodes={nodes}
           selectedId={selectedId}
           onSelect={onSelect}
         />
