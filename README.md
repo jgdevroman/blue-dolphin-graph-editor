@@ -9,9 +9,10 @@ A diagram editor for visualizing and managing large node networks. Built with Re
 ## Quick Start
 
 ```bash
-bun install      # or: npm install
-bun run dev      # or: npm run dev
-bun run test     # or: npm test  (Phase 6 — not yet configured)
+bun install
+bun run dev
+bun run test
+bun run test:coverage
 ```
 
 ## Tech Stack
@@ -24,7 +25,7 @@ bun run test     # or: npm test  (Phase 6 — not yet configured)
 | UI components        | MUI 9 + Emotion               | Side panel, buttons, and layout primitives                                                          |
 | Package manager      | Bun                           | Faster installs; fully compatible with npm (`npm install && npm run dev` also works)                |
 | Linter / formatter   | Biome                         | Single tool replacing ESLint + Prettier; zero config, fast, TypeScript-aware                        |
-| Test runner          | Jest + ts-jest                | Required by the assignment spec (added in Phase 6)                                                  |
+| Test runner          | Jest + ts-jest                | Required by the assignment spec                                                                     |
 
 **React Compiler — skipped.** The compiler is designed for codebases that haven't manually applied `memo`/`useCallback`. This project does the opposite: explicit `React.memo` and stable callbacks are a deliberate architecture choice that demonstrates the optimization reasoning. Enabling the compiler on top would make that reasoning invisible.
 
@@ -233,28 +234,30 @@ _(TBD — measured numbers from DevTools profiling once implementation is comple
 
 ### Three layers of tests
 
-**1. Pure unit — `graphUtils.test.ts`**
+**1. Pure unit tests**
 
-Tests the `generateGraph(n)` function in isolation with no React or DOM involvement. Assertions cover node count, id uniqueness, type field, link endpoint validity, no self-loops, no duplicate pairs, and full graph connectivity via BFS. All cases use straightforward `expect(...).toBe(true)` patterns with no mocks.
+These tests cover small, deterministic functions and component branches with mocks where needed.
 
-**2. Component unit — `SidePanel`, `NodeRow`, `GraphEditor`**
+- `src/utils/graphUtils.test.ts` exercises graph generation logic in isolation, including node counts, connectivity, and link uniqueness.
+- `src/components/node-row/index.test.tsx` checks row rendering and selection clicks.
+- `src/components/side-panel/index.test.tsx` verifies rendering states and name editing behavior with a real `useState` wrapper.
+- `src/components/drawer/index.test.tsx` checks the responsive switch between the persistent and permanent drawer variants.
+- `src/components/diagram-wrapper/index.test.tsx` covers the defensive listener branch when no GoJS diagram is available.
 
-Components are rendered with Testing Library and driven via `@testing-library/user-event`. Where a component has heavy dependencies, those are stubbed via `jest.mock`:
+**2. DiagramCanvas unit tests**
 
-- `GraphEditor` mocks `../diagram-canvas` with a lightweight div so tests can focus on drawer open/close logic without GoJS overhead.
-- `SidePanel` uses a real-`useState` wrapper around the component so the controlled `TextField` reacts to user input.
-- `NodeRow` is rendered directly with mock callbacks; the click handler is exercised by `userEvent.click`.
+`src/components/diagram-canvas/index.test.tsx` covers the sync logic around GoJS and React. The suite uses a scoped mock of `DiagramWrapper` for the branch-heavy cases so the tests can verify selection sync, loop suppression, and no-diagram guards without depending on full diagram initialization.
 
-**3. Integration — `DiagramCanvas`**
+**3. Integration test**
 
-The integration suite renders the full `<App />` (including GoJS) and interacts with the diagram through its tool API rather than simulating canvas pointer events. jsdom provides no real hit-testing, so pointer events on a canvas element do nothing; the tool API is the correct seam.
+`src/app.integration.test.tsx` renders the full `<App />` and verifies the canvas and side panel working together. The test suite now uses a small mocked graph fixture instead of the full generated graph, which keeps the integration tests fast and stable in CI.
 
-Key techniques:
+Key integration techniques:
 
-- **Fake timers** — `jest.useFakeTimers()` + `jest.advanceTimersByTime(500)` to let GoJS complete its initialization inside the fake clock before assertions run.
-- **`go.Diagram.fromDiv()`** — retrieves the live GoJS `Diagram` instance from the DOM element once timers have advanced.
-- **Tool API** — `tool.doActivate(); tool.insertPart(point); tool.doStop()` drives `ClickCreatingTool` exactly as a background double-click would. `linkValidation` is extracted and called directly.
-- **`act()` wrapping** — all GoJS mutations (model commits, tool calls, timer advancement) are wrapped in `act()` so React flushes state updates before assertions.
+- **GoJS instance access** — `go.Diagram.fromDiv()` retrieves the live diagram from the DOM.
+- **Timer flushing** — `jest.useFakeTimers()` and `jest.runOnlyPendingTimers()` let GoJS finish initialization before assertions run.
+- **Tool API** — the tests drive GoJS behavior through the diagram tool APIs and `diagram.select(...)` instead of canvas pointer events, which jsdom cannot simulate reliably.
+- **Responsive checks** — `window.matchMedia` is mocked so drawer behavior can be tested in mobile and desktop modes.
 
 ### GoJS sync pattern coverage
 
@@ -269,27 +272,18 @@ Mocks that involve GoJS or `gojs-react` are scoped to dedicated test files to av
 ### Coverage results
 
 ```
--------------------------------|---------|----------|---------|---------|-----------
-File                           | % Stmts | % Branch | % Funcs | % Lines |
--------------------------------|---------|----------|---------|---------|-----------
-All files                      |   95.98 |    83.33 |     100 |    95.7 |
- src/components/diagram-canvas |   88.73 |    66.66 |     100 |   88.23 |
- src/components/diagram-wrapper|   97.22 |    90.90 |     100 |   97.14 |
- src/components/drawer         |     100 |      100 |     100 |     100 |
- src/components/graph-editor   |     100 |      100 |     100 |     100 |
- src/components/node-list      |     100 |      100 |     100 |     100 |
- src/components/node-row       |     100 |      100 |     100 |     100 |
- src/components/properties-panel|    100 |      100 |     100 |     100 |
- src/components/side-panel     |     100 |      100 |     100 |     100 |
- src/utils/graphUtils          |   94.73 |       50 |     100 |   94.11 |
--------------------------------|---------|----------|---------|---------|-----------
+Statements   : 98.43% (252/256)
+Branches     : 87.50% (70/80)
+Functions    : 98.00% (49/50)
+Lines        : 98.74% (236/239)
 ```
 
 **Remaining gaps and why they are acceptable:**
 
-- `diagram-canvas` `!diagram` guards (lines 116, 137) — these fire only if `getDiagram()` returns null before GoJS initializes. In testing, GoJS initializes synchronously during `componentDidMount`, so the guard is structurally unreachable without replacing the entire GoJS initialization path. The guards are there as a defensive measure.
-- `graphUtils` line 20 (`return false` inside `addEdge`) — the spanning tree algorithm (`for i: connect i to random j < i`) produces each pair at most once, so the duplicate-prevention branch is dead code in the current algorithm. It is kept as a safety guard if the generation strategy ever changes.
-- `diagram-wrapper` line 28 — `handleInitialLayoutCompleted` is only reachable when the `InitialLayoutCompleted` event fires; in the null-guard test file, the mocked `ReactDiagram` never fires events, so the listener body is never entered.
+- `diagram-canvas` still has a handful of uncovered branches in the selection and model-sync guards. The lines are covered, but the defensive paths around `isAppNode`, `isAppLink`, `findNodeForKey`, and `nodeData` existence are not all taken in every case.
+- `diagram-wrapper` still has uncovered listener-registration branches around the `instanceof go.Diagram` checks in mount and cleanup. The component is exercised, but the defensive false paths are not taken in the happy-path tests.
+- `graphUtils` line 20 (`return false` inside `addEdge`) remains unreachable under the current spanning-tree generation strategy, which never proposes the same undirected pair twice.
+- `seedGraph` is a static constant file and is not imported by the app at runtime, so its declarations remain uncovered in the generated report.
 
 ## AI Disclosure
 

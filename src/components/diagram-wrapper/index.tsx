@@ -59,7 +59,7 @@ export const DiagramWrapper = ({
     // makeUniqueKeyFunction / makeUniqueLinkKeyFunction assign UUID ids before the data enters the model,
     // which onModelChange then picks up to sync new nodes and links into React state.
     const diagram = new go.Diagram({
-      "undoManager.isEnabled": true,
+      "undoManager.isEnabled": false,
       initialContentAlignment: go.Spot.Center,
       initialAutoScale: go.AutoScale.Uniform,
       "clickCreatingTool.archetypeNodeData": { name: "New Node", type: "Node" },
