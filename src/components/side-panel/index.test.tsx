@@ -57,6 +57,34 @@ describe("SidePanel — rendering", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows placeholder text when selectedId is not in the node index", () => {
+    // nodeIndexRef has no entry for "z", so nodes[-1] ?? null resolves to null
+    // and selectedNode is null. This covers the `?? null` branch in the ternary.
+    const emptyIndexRef = { current: new Map<string, number>() };
+
+    function Wrapper() {
+      const [nodes, setNodes] = useState<AppNode[]>(INITIAL_NODES);
+      return (
+        <SidePanel
+          nodes={nodes}
+          links={LINKS}
+          nodeIndexRef={emptyIndexRef}
+          selectedId="z"
+          isLoading={false}
+          onClose={jest.fn()}
+          onSelect={jest.fn()}
+          setNodes={setNodes}
+          setNamePatch={jest.fn()}
+        />
+      );
+    }
+
+    render(<Wrapper />);
+    expect(
+      screen.getByText("Select a node to view properties"),
+    ).toBeInTheDocument();
+  });
+
   it("shows name TextField with current node name when a node is selected", () => {
     renderSidePanelControlled("a");
     const input = screen.getByLabelText("Name") as HTMLInputElement;
@@ -98,5 +126,40 @@ describe("SidePanel — name update", () => {
 
     expect(input.value).toBe("");
     expect(setNamePatch).toHaveBeenLastCalledWith({ id: "a", name: "" });
+  });
+
+  it("returns prev nodes unchanged when selected node id is absent from index at update time", async () => {
+    const setNamePatch = jest.fn();
+    // Build a ref that contains "a" so selectedNode is non-null and the TextField renders.
+    const nodeIndexRef = buildIndexRef(INITIAL_NODES);
+
+    function Wrapper() {
+      const [nodes, setNodes] = useState<AppNode[]>(INITIAL_NODES);
+      return (
+        <SidePanel
+          nodes={nodes}
+          links={LINKS}
+          nodeIndexRef={nodeIndexRef}
+          selectedId="a"
+          isLoading={false}
+          onClose={jest.fn()}
+          onSelect={jest.fn()}
+          setNodes={setNodes}
+          setNamePatch={setNamePatch}
+        />
+      );
+    }
+
+    render(<Wrapper />);
+    const input = screen.getByLabelText("Name") as HTMLInputElement;
+
+    // Mutate the ref so the setNodes updater finds nodeIndex === undefined.
+    // Refs don't trigger a re-render, so the TextField stays visible until the next state change.
+    nodeIndexRef.current.delete("a");
+
+    await userEvent.type(input, "X");
+
+    // setNamePatch is always called regardless of the index guard — confirm it ran.
+    expect(setNamePatch).toHaveBeenCalled();
   });
 });

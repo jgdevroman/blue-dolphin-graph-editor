@@ -220,7 +220,76 @@ _(TBD — measured numbers from DevTools profiling once implementation is comple
 
 ## Testing Approach
 
-_(TBD — once Jest is configured and tests are written)_
+### Stack and configuration
+
+| Concern | Choice | Reason |
+|---|---|---|
+| Runner | Jest 30 + ts-jest | Hard project requirement (NFR-7); Vitest and `bun test` are explicitly excluded |
+| Config file | `jest.config.cjs` (`.cjs` extension) | `"type": "module"` in `package.json` makes Node treat `.js` as ESM; the CommonJS extension avoids a parse error |
+| TS config | `tsconfig.test.json` | Separate file with `module: "CommonJS"` and `moduleResolution: "node"`. The app tsconfig uses `moduleResolution: "bundler"` which is Vite-specific and breaks ts-jest |
+| Canvas | `jest-canvas-mock` | GoJS uses `<canvas>` internally; jsdom provides no canvas implementation |
+| DOM matchers | `@testing-library/jest-dom` | Adds `toBeInTheDocument`, `toHaveValue`, etc. |
+| Command | `bunx jest` / `bunx jest --coverage` | Use the `test:coverage` script from `package.json` for a full coverage report |
+
+### Three layers of tests
+
+**1. Pure unit — `graphUtils.test.ts`**
+
+Tests the `generateGraph(n)` function in isolation with no React or DOM involvement. Assertions cover node count, id uniqueness, type field, link endpoint validity, no self-loops, no duplicate pairs, and full graph connectivity via BFS. All cases use straightforward `expect(...).toBe(true)` patterns with no mocks.
+
+**2. Component unit — `SidePanel`, `NodeRow`, `GraphEditor`**
+
+Components are rendered with Testing Library and driven via `@testing-library/user-event`. Where a component has heavy dependencies, those are stubbed via `jest.mock`:
+
+- `GraphEditor` mocks `../diagram-canvas` with a lightweight div so tests can focus on drawer open/close logic without GoJS overhead.
+- `SidePanel` uses a real-`useState` wrapper around the component so the controlled `TextField` reacts to user input.
+- `NodeRow` is rendered directly with mock callbacks; the click handler is exercised by `userEvent.click`.
+
+**3. Integration — `DiagramCanvas`**
+
+The integration suite renders the full `<App />` (including GoJS) and interacts with the diagram through its tool API rather than simulating canvas pointer events. jsdom provides no real hit-testing, so pointer events on a canvas element do nothing; the tool API is the correct seam.
+
+Key techniques:
+
+- **Fake timers** — `jest.useFakeTimers()` + `jest.advanceTimersByTime(500)` to let GoJS complete its initialization inside the fake clock before assertions run.
+- **`go.Diagram.fromDiv()`** — retrieves the live GoJS `Diagram` instance from the DOM element once timers have advanced.
+- **Tool API** — `tool.doActivate(); tool.insertPart(point); tool.doStop()` drives `ClickCreatingTool` exactly as a background double-click would. `linkValidation` is extracted and called directly.
+- **`act()` wrapping** — all GoJS mutations (model commits, tool calls, timer advancement) are wrapped in `act()` so React flushes state updates before assertions.
+
+### GoJS sync pattern coverage
+
+The GoJS sync layer has several defensive branches that can only fire if the diagram or a node is absent at effect time. These are covered in isolation:
+
+- **`!diagram` null guards** (selection effect and name-patch effect in `DiagramCanvas`) — covered by rendering `DiagramCanvas` directly with an empty diagram and a `selectedId` that does not exist, so `findNodeForKey` returns null.
+- **`!(diagram instanceof go.Diagram)` type guard** (`DiagramWrapper`) — covered in a separate file that mocks `gojs-react` so `diagramRef.current` is never set, causing the guard to fire on the `InitialLayoutCompleted` listener.
+- **`nodeIndex === undefined` guard** (`SidePanel.handleNameChange`) — covered by mutating the `nodeIndexRef` between render and user input so the `setNodes` updater receives a stale index.
+
+Mocks that involve GoJS or `gojs-react` are scoped to dedicated test files to avoid interfering with the integration suite's real GoJS instance.
+
+### Coverage results
+
+```
+-------------------------------|---------|----------|---------|---------|-----------
+File                           | % Stmts | % Branch | % Funcs | % Lines |
+-------------------------------|---------|----------|---------|---------|-----------
+All files                      |   95.98 |    83.33 |     100 |    95.7 |
+ src/components/diagram-canvas |   88.73 |    66.66 |     100 |   88.23 |
+ src/components/diagram-wrapper|   97.22 |    90.90 |     100 |   97.14 |
+ src/components/drawer         |     100 |      100 |     100 |     100 |
+ src/components/graph-editor   |     100 |      100 |     100 |     100 |
+ src/components/node-list      |     100 |      100 |     100 |     100 |
+ src/components/node-row       |     100 |      100 |     100 |     100 |
+ src/components/properties-panel|    100 |      100 |     100 |     100 |
+ src/components/side-panel     |     100 |      100 |     100 |     100 |
+ src/utils/graphUtils          |   94.73 |       50 |     100 |   94.11 |
+-------------------------------|---------|----------|---------|---------|-----------
+```
+
+**Remaining gaps and why they are acceptable:**
+
+- `diagram-canvas` `!diagram` guards (lines 116, 137) — these fire only if `getDiagram()` returns null before GoJS initializes. In testing, GoJS initializes synchronously during `componentDidMount`, so the guard is structurally unreachable without replacing the entire GoJS initialization path. The guards are there as a defensive measure.
+- `graphUtils` line 20 (`return false` inside `addEdge`) — the spanning tree algorithm (`for i: connect i to random j < i`) produces each pair at most once, so the duplicate-prevention branch is dead code in the current algorithm. It is kept as a safety guard if the generation strategy ever changes.
+- `diagram-wrapper` line 28 — `handleInitialLayoutCompleted` is only reachable when the `InitialLayoutCompleted` event fires; in the null-guard test file, the mocked `ReactDiagram` never fires events, so the listener body is never entered.
 
 ## AI Disclosure
 

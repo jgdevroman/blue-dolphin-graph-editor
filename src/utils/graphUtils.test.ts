@@ -36,6 +36,19 @@ describe("generateGraph", () => {
     expect(links.every((l) => l.from !== l.to)).toBe(true);
   });
 
+  it("generated links contain no duplicate pairs (from/to or to/from)", () => {
+    const { links } = generateGraph(100);
+    const seen = new Set<string>();
+    for (const link of links) {
+      const key =
+        link.from < link.to
+          ? `${link.from}|${link.to}`
+          : `${link.to}|${link.from}`;
+      expect(seen.has(key)).toBe(false);
+      seen.add(key);
+    }
+  });
+
   it("graph is connected for n=20 (BFS from n0 reaches all nodes)", () => {
     const { nodes, links } = generateGraph(20);
     const adjacency = new Map<string, string[]>();

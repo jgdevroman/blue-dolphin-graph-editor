@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as go from "gojs";
 import { App } from "../../App";
+import { DiagramCanvas } from ".";
 
 let diagram: go.Diagram;
 
@@ -153,6 +154,40 @@ describe("DiagramCanvas — add link sync", () => {
       jest.advanceTimersByTime(100);
     });
     expect(diagram.links.count).toBe(initialCount + 1);
+  });
+});
+
+// ──────────────────────────────────────────────────────
+// Selection effect — node not found in diagram
+// ──────────────────────────────────────────────────────
+
+describe("DiagramCanvas — selection effect node not found", () => {
+  it("does not crash when selectedId has no matching node in the diagram", () => {
+    // Render DiagramCanvas directly with a selectedId that does not exist in the
+    // empty diagram. diagram.findNodeForKey() returns null, taking the if(node)
+    // false branch on line 122 without throwing.
+    const nodeIndexRef = { current: new Map<string, number>() };
+    const linkIndexRef = { current: new Map<string, number>() };
+
+    expect(() => {
+      act(() => {
+        render(
+          <DiagramCanvas
+            nodes={[]}
+            links={[]}
+            nodeIndexRef={nodeIndexRef}
+            linkIndexRef={linkIndexRef}
+            selectedId="non-existent-id"
+            namePatch={null}
+            onInitialLayoutCompleted={jest.fn()}
+            setSelectedId={jest.fn()}
+            setNodes={jest.fn()}
+            setLinks={jest.fn()}
+          />,
+        );
+        jest.advanceTimersByTime(100);
+      });
+    }).not.toThrow();
   });
 });
 
