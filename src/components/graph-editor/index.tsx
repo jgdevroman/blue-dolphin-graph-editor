@@ -97,7 +97,6 @@ export const GraphEditor = () => {
       <Drawer open={open} onExited={() => setDrawerExited(true)}>
         <SidePanel
           nodes={nodes}
-          links={links}
           nodeIndexRef={nodeIndexRef}
           selectedId={selectedId}
           isLoading={isLoading}

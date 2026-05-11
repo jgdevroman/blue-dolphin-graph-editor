@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import type { AppLink, AppNode } from "../../types/graph";
+import type { AppNode } from "../../types/graph";
 import { SidePanel } from ".";
 
 const INITIAL_NODES: AppNode[] = [
@@ -9,8 +9,6 @@ const INITIAL_NODES: AppNode[] = [
   { id: "b", name: "Beta", type: "Node" },
   { id: "c", name: "Gamma", type: "Node" },
 ];
-
-const LINKS: AppLink[] = [];
 
 function buildIndexRef(nodes: AppNode[]) {
   return { current: new Map(nodes.map((n, i) => [n.id, i])) };
@@ -30,7 +28,6 @@ function renderSidePanelControlled(
     return (
       <SidePanel
         nodes={nodes}
-        links={LINKS}
         nodeIndexRef={nodeIndexRef}
         selectedId={selectedId}
         isLoading={false}
@@ -67,7 +64,6 @@ describe("SidePanel — rendering", () => {
       return (
         <SidePanel
           nodes={nodes}
-          links={LINKS}
           nodeIndexRef={emptyIndexRef}
           selectedId="z"
           isLoading={false}
@@ -138,7 +134,6 @@ describe("SidePanel — name update", () => {
       return (
         <SidePanel
           nodes={nodes}
-          links={LINKS}
           nodeIndexRef={nodeIndexRef}
           selectedId="a"
           isLoading={false}
