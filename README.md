@@ -9,9 +9,10 @@ A diagram editor for visualizing and managing large node networks. Built with Re
 ## Quick Start
 
 ```bash
-bun install      # or: npm install
-bun run dev      # or: npm run dev
-bun run test     # or: npm test  (Phase 6 — not yet configured)
+bun install
+bun run dev
+bun run test
+bun run test:coverage
 ```
 
 ## Tech Stack
@@ -24,7 +25,7 @@ bun run test     # or: npm test  (Phase 6 — not yet configured)
 | UI components        | MUI 9 + Emotion               | Side panel, buttons, and layout primitives                                                          |
 | Package manager      | Bun                           | Faster installs; fully compatible with npm (`npm install && npm run dev` also works)                |
 | Linter / formatter   | Biome                         | Single tool replacing ESLint + Prettier; zero config, fast, TypeScript-aware                        |
-| Test runner          | Jest + ts-jest                | Required by the assignment spec (added in Phase 6)                                                  |
+| Test runner          | Jest + ts-jest                | Required by the assignment spec                                                                     |
 
 **React Compiler — skipped.** The compiler is designed for codebases that haven't manually applied `memo`/`useCallback`. This project does the opposite: explicit `React.memo` and stable callbacks are a deliberate architecture choice that demonstrates the optimization reasoning. Enabling the compiler on top would make that reasoning invisible.
 
@@ -66,18 +67,6 @@ So the design solves the problem at the layer it lives:
 | **`IntersectionObserver` lazy mount**          | Native browser API                                                                                       | Doesn't solve the React reconciliation cost — placeholders still mount                                                                                                                                                  |
 | **Pagination** ("Load more" / page N of M)     | Trivial to implement, solves perf                                                                        | Changes UX from "scrollable list" the spec implies                                                                                                                                                                      |
 | **`React.memo` + `content-visibility` ✅**     | Solves the actual bottleneck (reconciliation) at the right layer; lets the browser handle paint natively | —                                                                                                                                                                                                                       |
-
-**Performance characteristics:**
-
-| Operation                  | Cost                                                                                                                    |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Initial mount of 1000 rows | ~150-300 ms (hidden behind the same loading state as the GoJS ForceDirected layout — user perceives one delay, not two) |
-| Selection change           | <5 ms (only the previously-selected and newly-selected rows re-render)                                                  |
-| Name edit on selected row  | <5 ms (only that row re-renders)                                                                                        |
-| Adding a node              | <5 ms (999 rows skip via `memo`)                                                                                        |
-| Scroll                     | 60 fps (browser skips paint for off-screen rows via `content-visibility`)                                               |
-
-**The discipline this requires:** `React.memo` is silently defeated by any unstable prop reference. Every callback handed to a row must be wrapped in `useCallback` with stable deps, and the row component must receive primitives, not objects. This is verifiable in the React DevTools Profiler — a name edit should highlight a single row, not the whole list.
 
 ### Responsive side panel: persistent drawer, not temporary
 
@@ -220,7 +209,95 @@ _(TBD — measured numbers from DevTools profiling once implementation is comple
 
 ## Testing Approach
 
-_(TBD — once Jest is configured and tests are written)_
+### Stack and configuration
+
+| Concern | Choice | Reason |
+|---|---|---|
+| Runner | Jest 30 + ts-jest | Hard project requirement (NFR-7); Vitest and `bun test` are explicitly excluded |
+| Config file | `jest.config.cjs` (`.cjs` extension) | `"type": "module"` in `package.json` makes Node treat `.js` as ESM; the CommonJS extension avoids a parse error |
+| TS config | `tsconfig.test.json` | Separate file with `module: "CommonJS"` and `moduleResolution: "node"`. The app tsconfig uses `moduleResolution: "bundler"` which is Vite-specific and breaks ts-jest |
+| Canvas | `jest-canvas-mock` | GoJS uses `<canvas>` internally; jsdom provides no canvas implementation |
+| DOM matchers | `@testing-library/jest-dom` | Adds `toBeInTheDocument`, `toHaveValue`, etc. |
+| Command | `bunx jest` / `bunx jest --coverage` | Use the `test:coverage` script from `package.json` for a full coverage report |
+
+### Three layers of tests
+
+**1. Pure unit tests**
+
+These tests cover small, deterministic functions and component branches with mocks where needed.
+
+- `src/utils/graphUtils.test.ts` exercises graph generation logic in isolation, including node counts, connectivity, and link uniqueness.
+- `src/components/node-row/index.test.tsx` checks row rendering and selection clicks.
+- `src/components/side-panel/index.test.tsx` verifies rendering states and name editing behavior with a real `useState` wrapper.
+- `src/components/drawer/index.test.tsx` checks the responsive switch between the persistent and permanent drawer variants.
+- `src/components/diagram-wrapper/index.test.tsx` covers the defensive listener branch when no GoJS diagram is available.
+
+Key cases:
+
+| File | Case |
+|---|---|
+| `graph-utils.test.ts` | 1 000-node graph has exactly 1 000 unique IDs |
+| `graph-utils.test.ts` | All link endpoints reference valid node IDs |
+| `graph-utils.test.ts` | No self-loops and no duplicate pairs in generated links |
+| `graph-utils.test.ts` | BFS from `n0` reaches all nodes (graph is connected) |
+| `graph-utils.test.ts` | `n=0` returns empty arrays without crashing |
+| `node-row/index.test.tsx` | Click calls `onSelect` with the node ID and sets `selectedFromList` to `true` |
+| `side-panel/index.test.tsx` | Shows placeholder when no node is selected or ID is absent from index |
+| `side-panel/index.test.tsx` | Typing in the name field calls `setNamePatch` with the updated name |
+| `side-panel/index.test.tsx` | Clearing the field calls `setNamePatch` with an empty string |
+
+**2. DiagramCanvas unit tests**
+
+`src/components/diagram-canvas/index.test.tsx` covers the sync logic around GoJS and React. The suite uses a scoped mock of `DiagramWrapper` for the branch-heavy cases so the tests can verify selection sync, loop suppression, and no-diagram guards without depending on full diagram initialization.
+
+Key cases:
+
+| Case |
+|---|
+| All provided nodes are rendered on load |
+| `ClickCreatingTool` inserts a new node into the diagram |
+| Self-loop link is rejected by the link validation rule |
+| Duplicate link between already-connected nodes is rejected |
+| Valid link between distinct, unconnected nodes is accepted |
+| Adding a link via the model increments `diagram.links.count` |
+| Does not crash when `selectedId` has no matching node in the diagram |
+| Selecting a node from React calls `diagram.select` and `diagram.centerRect`, then suppresses the next `ChangedSelection` event to prevent a feedback loop |
+| Selection and name-patch effects return early when no diagram is mounted |
+
+**3. Integration test**
+
+`src/app.integration.test.tsx` renders the full `<App />` and verifies the canvas and side panel working together. The test suite now uses a small mocked graph fixture instead of the full generated graph, which keeps the integration tests fast and stable in CI.
+
+Key cases:
+
+| Case |
+|---|
+| Mobile drawer opens from the trigger button and closes from the panel close button |
+| Selecting a node on the canvas highlights its row in the NodeList |
+| Adding a node on the canvas appends its row to the NodeList |
+| Editing a node name in the properties panel updates the node label in the diagram |
+| Drawing a link via `LinkingTool.insertLink()` syncs the new link into React state |
+
+Key integration techniques:
+
+- **GoJS instance access** — `go.Diagram.fromDiv()` retrieves the live diagram from the DOM.
+- **Timer flushing** — `jest.useFakeTimers()` and `jest.runOnlyPendingTimers()` let GoJS finish initialization before assertions run.
+- **Tool API** — the tests drive GoJS behavior through the diagram tool APIs and `diagram.select(...)` instead of canvas pointer events, which jsdom cannot simulate reliably.
+- **Responsive checks** — `window.matchMedia` is mocked so drawer behavior can be tested in mobile and desktop modes.
+
+### Coverage results
+
+```
+Statements   : 98.43% (252/256)
+Branches     : 87.50% (70/80)
+Functions    : 98.00% (49/50)
+Lines        : 98.74% (236/239)
+```
+
+**Remaining gaps and why they are acceptable:**
+
+- `diagram-canvas` still has a handful of uncovered branches in the selection and model-sync guards. The lines are covered, but the defensive paths around `isAppNode`, `isAppLink`, `findNodeForKey`, and `nodeData` existence are not all taken in every case.
+- `diagram-wrapper` still has uncovered listener-registration branches around the `instanceof go.Diagram` checks in mount and cleanup. The component is exercised, but the defensive false paths are not taken in the happy-path tests.
 
 ## AI Disclosure
 

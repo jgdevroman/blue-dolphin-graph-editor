@@ -1,7 +1,7 @@
 import List from "@mui/material/List";
 import { useEffect, useRef, useState } from "react";
-import type { AppNode } from "../types/graph";
-import { NodeRow } from "./NodeRow";
+import type { AppNode } from "../../types/graph";
+import { NodeRow } from "../node-row";
 
 type Props = {
   nodes: AppNode[];

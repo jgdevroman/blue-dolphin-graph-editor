@@ -1,6 +1,6 @@
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
-import { GraphEditor } from "./components/GraphEditor";
+import { GraphEditor } from "./components/graph-editor";
 
 const theme = createTheme();
 

@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "bunx jest",
+    "test:coverage": "bunx jest --coverage"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -21,10 +23,18 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "jest": "^30.4.2",
+    "jest-canvas-mock": "^2.5.2",
+    "jest-environment-jsdom": "^30.4.1",
+    "ts-jest": "^29.4.9",
     "typescript": "~6.0.2",
     "vite": "^8.0.10"
   }

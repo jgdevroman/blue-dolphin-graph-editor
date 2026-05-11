@@ -1,7 +1,7 @@
 import * as go from "gojs";
 import { ReactDiagram } from "gojs-react";
 import { type RefObject, useEffect } from "react";
-import type { AppLink, AppNode } from "../types/graph";
+import type { AppLink, AppNode } from "../../types/graph";
 
 type Props = {
   diagramRef: RefObject<ReactDiagram | null>;
@@ -60,6 +60,8 @@ export const DiagramWrapper = ({
     // which onModelChange then picks up to sync new nodes and links into React state.
     const diagram = new go.Diagram({
       "undoManager.isEnabled": true,
+      allowDelete: false,
+      allowUndo: false,
       initialContentAlignment: go.Spot.Center,
       initialAutoScale: go.AutoScale.Uniform,
       "clickCreatingTool.archetypeNodeData": { name: "New Node", type: "Node" },
