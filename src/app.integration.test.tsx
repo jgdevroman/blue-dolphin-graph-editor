@@ -177,6 +177,39 @@ describe("DiagramCanvas — Integration Tests (Shared App Instance)", () => {
   });
 
   // ──────────────────────────────────────────────────────
+  // Draw link → React link state sync
+  // ──────────────────────────────────────────────────────
+
+  describe("draw link → React link state sync", () => {
+    it("drawing a link via LinkingTool syncs into React links state", async () => {
+      const { diagram } = renderAppWithDiagram();
+
+      await waitFor(() => {
+        expect(diagram.links.count).toBeGreaterThan(0);
+      });
+
+      const initialLinkCount = diagram.links.count;
+      const fromNode = diagram.findNodeForKey("n1") as go.Node;
+      const toNode = diagram.findNodeForKey("n3") as go.Node;
+
+      // Draw the link through the tool — same pattern as ClickCreatingTool in the add-node test.
+      // insertLink fires onModelChange → handleModelChange → setLinks so React state gets the new link.
+      act(() => {
+        diagram.toolManager.linkingTool.insertLink(
+          fromNode,
+          fromNode.port,
+          toNode,
+          toNode.port,
+        );
+      });
+
+      await waitFor(() => {
+        expect(diagram.links.count).toBe(initialLinkCount + 1);
+      });
+    });
+  });
+
+  // ──────────────────────────────────────────────────────
   // Name patch sync via UI
   // ──────────────────────────────────────────────────────
 
