@@ -26,9 +26,7 @@ describe("generateGraph", () => {
   it("all link endpoints reference valid node IDs", () => {
     const { nodes, links } = generateGraph(50);
     const idSet = new Set(nodes.map((n) => n.id));
-    expect(
-      links.every((l) => idSet.has(l.from) && idSet.has(l.to)),
-    ).toBe(true);
+    expect(links.every((l) => idSet.has(l.from) && idSet.has(l.to))).toBe(true);
   });
 
   it("no self-loops in generated links", () => {

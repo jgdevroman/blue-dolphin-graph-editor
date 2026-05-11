@@ -2,8 +2,8 @@
 // gojs-react is mocked so diagramRef receives an object whose getDiagram() returns
 // null, causing the early-return branch on line 28 to fire.
 import { render } from "@testing-library/react";
-import { useRef } from "react";
 import type { ReactDiagram } from "gojs-react";
+import { useRef } from "react";
 
 jest.mock("gojs-react", () => ({
   ReactDiagram: ({
