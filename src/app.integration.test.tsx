@@ -1,6 +1,25 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as go from "gojs";
+
+jest.mock("./utils/graphUtils", () => {
+  const actual = jest.requireActual("./utils/graphUtils");
+  return {
+    ...actual,
+    GENERATED_GRAPH: {
+      nodes: [
+        { id: "n1", name: "Node 1", type: "Node" },
+        { id: "n2", name: "Node 2", type: "Node" },
+        { id: "n3", name: "Node 3", type: "Node" },
+      ],
+      links: [
+        { id: "l1", from: "n1", to: "n2" },
+        { id: "l2", from: "n2", to: "n3" },
+      ],
+    },
+  };
+});
+
 import { App } from "./App";
 
 // ──────────────────────────────────────────────────────
@@ -174,31 +193,13 @@ describe("DiagramCanvas — Integration Tests (Shared App Instance)", () => {
       iter.next();
       const node = iter.value as go.Node;
       const nodeId = String(node.key);
-      const originalName = String(node.data.name);
 
       // Select the node on the canvas
       act(() => {
         diagram.select(node);
       });
 
-      // Wait for the name input to appear (use getByRole to target the specific input in PropertiesPanel)
-      const nameInput = await waitFor(
-        () => {
-          const inputs = screen.getAllByDisplayValue(originalName);
-          // Filter for the input in the properties panel (the one not in the node list)
-          const propsInput = inputs.find((input) => {
-            const drawer = input.closest(
-              ".MuiDrawer-paper",
-            ) as HTMLElement | null;
-            return drawer && drawer.style.visibility !== "hidden";
-          }) as HTMLInputElement;
-          if (!propsInput) {
-            throw new Error("Properties panel name input not found");
-          }
-          return propsInput;
-        },
-        { timeout: 3000 },
-      );
+      const nameInput = await screen.findByLabelText("Name");
 
       const newName = "Updated Name";
 
