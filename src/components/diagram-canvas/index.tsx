@@ -34,10 +34,12 @@ export const DiagramCanvas = ({
 }: Props) => {
   const diagramRef = useRef<ReactDiagram | null>(null);
   const [skipsDiagramUpdate, setSkipsDiagramUpdate] = useState(false);
+  // This ref is used to prevent loops between GoJS-driven selection changes and React-driven selectedId state.
   const suppressNextSelectionEventRef = useRef(false);
 
   /**
-   * Handles ChangedSelection events from GoJS, pushing the selected node id into React state to update the side panel's selected node.
+   * Handles ChangedSelection events from GoJS, pushing the selected node id into React 
+   * state to update the side panel's selected node.
    */
   const handleChangedSelection = (e: go.DiagramEvent) => {
     // if the selection change originated from React pushing selectedId into GoJS, do not update React state again and cause a loop.
@@ -127,7 +129,7 @@ export const DiagramCanvas = ({
     }
   }, [selectedId]);
 
-  // Patch a single node name in GoJS without touching the rest of the model.
+  // Patch a single node name in GoJS coming from the side panel. 
   useEffect(() => {
     if (!namePatch) {
       return;
