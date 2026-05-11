@@ -60,6 +60,8 @@ export const DiagramWrapper = ({
     // which onModelChange then picks up to sync new nodes and links into React state.
     const diagram = new go.Diagram({
       "undoManager.isEnabled": true,
+      allowDelete: false,
+      allowUndo: false,
       initialContentAlignment: go.Spot.Center,
       initialAutoScale: go.AutoScale.Uniform,
       "clickCreatingTool.archetypeNodeData": { name: "New Node", type: "Node" },
