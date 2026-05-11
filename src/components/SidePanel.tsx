@@ -74,7 +74,19 @@ export const SidePanel = ({
           flexDirection: "column",
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", p: 1 }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            p: 1,
+            position: "sticky",
+            top: 0,
+            zIndex: 1,
+            bgcolor: "background.paper",
+            borderBottom: 1,
+            borderColor: "divider",
+          }}
+        >
           <Typography
             variant="overline"
             sx={{
@@ -95,7 +107,6 @@ export const SidePanel = ({
             ✕
           </IconButton>
         </Box>
-        <Divider />
         <NodeList nodes={nodes} selectedId={selectedId} onSelect={onSelect} />
       </Box>
 
