@@ -1,43 +1,61 @@
 import * as go from "gojs";
 import type { ReactDiagram } from "gojs-react";
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import type { AppLink, AppNode } from "../types/graph";
 import type { NamePatch } from "../types/graph-editor";
 import { isAppLink, isAppNode } from "../types/graph-guards";
 import { DiagramWrapper } from "./DiagramWrapper";
 
 type Props = {
-  nodes: Map<string, AppNode>;
-  links: Map<string, AppLink>;
+  nodes: AppNode[];
+  links: AppLink[];
+  nodeIndexRef: React.RefObject<Map<string, number>>;
+  linkIndexRef: React.RefObject<Map<string, number>>;
   selectedId: string | null;
   namePatch: NamePatch | null;
-  onSelectionChange: (id: string | null) => void;
-  setNodes: React.Dispatch<React.SetStateAction<Map<string, AppNode>>>;
-  setLinks: React.Dispatch<React.SetStateAction<Map<string, AppLink>>>;
+  onInitialLayoutCompleted: () => void;
+  setSelectedId: (id: string | null) => void;
+  setNodes: React.Dispatch<React.SetStateAction<AppNode[]>>;
+  setLinks: React.Dispatch<React.SetStateAction<AppLink[]>>;
 };
 
 export const DiagramCanvas = ({
   nodes,
   links,
+  nodeIndexRef,
+  linkIndexRef,
   selectedId,
   namePatch,
-  onSelectionChange,
+  onInitialLayoutCompleted,
+  setSelectedId,
   setNodes,
   setLinks,
 }: Props) => {
   const diagramRef = useRef<ReactDiagram | null>(null);
   const [skipsDiagramUpdate, setSkipsDiagramUpdate] = useState(false);
+  const suppressNextSelectionEventRef = useRef(false);
 
   /**
-   * Handles ChangedSelection events from GoJS, pushing the selected node id into React state.
+   * Handles ChangedSelection events from GoJS, pushing the selected node id into React state to update the side panel's selected node.
    */
   const handleChangedSelection = (e: go.DiagramEvent) => {
+    // if the selection change originated from React pushing selectedId into GoJS, do not update React state again and cause a loop.
+    if (suppressNextSelectionEventRef.current) {
+      suppressNextSelectionEventRef.current = false;
+      setSkipsDiagramUpdate(false);
+      return;
+    }
+
     setSkipsDiagramUpdate(true);
+    suppressNextSelectionEventRef.current = true;
     const firstSelected = e.subject.first();
-    onSelectionChange(
-      firstSelected instanceof go.Node ? String(firstSelected.key) : null,
-    );
+    // to make the selection feel snappier, give the selectedId update lower priority so that it does not block the canvas when the node is being dragged around.
+    startTransition(() => {
+      setSelectedId(
+        firstSelected instanceof go.Node ? String(firstSelected.key) : null,
+      );
+    });
   };
 
   /**
@@ -57,12 +75,11 @@ export const DiagramCanvas = ({
       const nodeData = modifiedNodeMap.get(String(key));
       if (nodeData) {
         setNodes((prev) => {
-          if (prev.has(nodeData.id)) {
+          if (nodeIndexRef.current.has(nodeData.id)) {
             return prev;
           }
-          const next = new Map(prev);
-          next.set(nodeData.id, nodeData);
-          return next;
+          nodeIndexRef.current.set(nodeData.id, prev.length);
+          return [...prev, nodeData];
         });
       }
     });
@@ -78,12 +95,11 @@ export const DiagramCanvas = ({
       const linkData = modifiedLinkMap.get(String(key));
       if (linkData) {
         setLinks((prev) => {
-          if (prev.has(linkData.id)) {
+          if (linkIndexRef.current.has(linkData.id)) {
             return prev;
           }
-          const next = new Map(prev);
-          next.set(linkData.id, linkData);
-          return next;
+          linkIndexRef.current.set(linkData.id, prev.length);
+          return [...prev, linkData];
         });
       }
     });
@@ -93,7 +109,9 @@ export const DiagramCanvas = ({
 
   // Push selectedId from React into GoJS, skipping when GoJS drove the change.
   useEffect(() => {
-    if (skipsDiagramUpdate) {
+    // if the change originated from GoJS, do not push it back in and cause a loop.
+    if (suppressNextSelectionEventRef.current) {
+      suppressNextSelectionEventRef.current = false;
       setSkipsDiagramUpdate(false);
       return;
     }
@@ -106,10 +124,12 @@ export const DiagramCanvas = ({
     } else {
       const node = diagram.findNodeForKey(selectedId);
       if (node) {
+        suppressNextSelectionEventRef.current = true;
         diagram.select(node);
+        diagram.centerRect(node.actualBounds);
       }
     }
-  }, [selectedId, skipsDiagramUpdate]);
+  }, [selectedId]);
 
   // Patch a single node name in GoJS without touching the rest of the model.
   useEffect(() => {
@@ -128,17 +148,15 @@ export const DiagramCanvas = ({
     }, "patch-name");
   }, [namePatch]);
 
-  const nodeDataArray = useMemo(() => [...nodes.values()], [nodes]);
-  const linkDataArray = useMemo(() => [...links.values()], [links]);
-
   return (
     <DiagramWrapper
       diagramRef={diagramRef}
-      nodeDataArray={nodeDataArray}
-      linkDataArray={linkDataArray}
+      nodeDataArray={nodes}
+      linkDataArray={links}
       skipsDiagramUpdate={skipsDiagramUpdate}
       onChangedSelection={handleChangedSelection}
       onModelChange={handleModelChange}
+      onInitialLayoutCompleted={onInitialLayoutCompleted}
     />
   );
 };

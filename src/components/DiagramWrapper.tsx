@@ -10,6 +10,7 @@ type Props = {
   skipsDiagramUpdate: boolean;
   onChangedSelection: (e: go.DiagramEvent) => void;
   onModelChange: (idata: go.IncrementalData, e: go.ChangedEvent) => void;
+  onInitialLayoutCompleted: () => void;
 };
 
 export const DiagramWrapper = ({
@@ -19,17 +20,36 @@ export const DiagramWrapper = ({
   skipsDiagramUpdate,
   onChangedSelection,
   onModelChange,
+  onInitialLayoutCompleted,
 }: Props) => {
-  // Add/remove listener on mount only.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: handler is stable (setSelectedId)
+  const handleInitialLayoutCompleted = (_e: go.DiagramEvent) => {
+    const diagram = diagramRef.current?.getDiagram();
+    if (!(diagram instanceof go.Diagram)) {
+      return;
+    }
+    // Prevent re-layout on subsequent model changes (node additions, name patches).
+    diagram.layout.isOngoing = false;
+    onInitialLayoutCompleted();
+  };
+
+  // Add/remove listeners on mount only.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: handlers are stable
   useEffect(() => {
     const diagram = diagramRef.current?.getDiagram();
     if (diagram instanceof go.Diagram) {
       diagram.addDiagramListener("ChangedSelection", onChangedSelection);
+      diagram.addDiagramListener(
+        "InitialLayoutCompleted",
+        handleInitialLayoutCompleted,
+      );
     }
     return () => {
       if (diagram instanceof go.Diagram) {
         diagram.removeDiagramListener("ChangedSelection", onChangedSelection);
+        diagram.removeDiagramListener(
+          "InitialLayoutCompleted",
+          handleInitialLayoutCompleted,
+        );
       }
     };
   }, []);
@@ -41,7 +61,21 @@ export const DiagramWrapper = ({
     const diagram = new go.Diagram({
       "undoManager.isEnabled": true,
       initialContentAlignment: go.Spot.Center,
+      initialAutoScale: go.AutoScale.Uniform,
       "clickCreatingTool.archetypeNodeData": { name: "New Node", type: "Node" },
+      layout: new go.ForceDirectedLayout({
+        arrangesToOrigin: true,
+        maxIterations: 200,
+        epsilonDistance: 1,
+        infinityDistance: 1000,
+        arrangementSpacing: new go.Size(150, 150),
+        defaultElectricalCharge: 400,
+        defaultGravitationalMass: 0,
+        defaultSpringStiffness: 0.05,
+        defaultSpringLength: 120,
+        prelayoutQuality: 0.1,
+        prelayoutSpread: 20,
+      }),
       model: new go.GraphLinksModel({
         nodeKeyProperty: "id",
         linkKeyProperty: "id",
