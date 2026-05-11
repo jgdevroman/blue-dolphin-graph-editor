@@ -2,8 +2,8 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as go from "gojs";
 
-jest.mock("./utils/graphUtils", () => {
-  const actual = jest.requireActual("./utils/graphUtils");
+jest.mock("./utils/graph-utils", () => {
+  const actual = jest.requireActual("./utils/graph-utils");
   return {
     ...actual,
     GENERATED_GRAPH: {
