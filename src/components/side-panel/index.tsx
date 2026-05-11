@@ -3,10 +3,10 @@ import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { useCallback } from "react";
-import type { AppLink, AppNode } from "../types/graph";
-import { LoadingOverlay } from "./LoadingOverlay";
-import { NodeList } from "./NodeList";
-import { PropertiesPanel } from "./PropertiesPanel";
+import type { AppLink, AppNode } from "../../types/graph";
+import { LoadingOverlay } from "../loading-overlay";
+import { NodeList } from "../node-list";
+import { PropertiesPanel } from "../properties-panel";
 
 type Props = {
   nodes: AppNode[];

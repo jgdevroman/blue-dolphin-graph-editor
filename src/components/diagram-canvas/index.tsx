@@ -2,10 +2,10 @@ import * as go from "gojs";
 import type { ReactDiagram } from "gojs-react";
 import type React from "react";
 import { startTransition, useEffect, useRef, useState } from "react";
-import type { AppLink, AppNode } from "../types/graph";
-import type { NamePatch } from "../types/graph-editor";
-import { isAppLink, isAppNode } from "../types/graph-guards";
-import { DiagramWrapper } from "./DiagramWrapper";
+import type { AppLink, AppNode } from "../../types/graph";
+import type { NamePatch } from "../../types/graph-editor";
+import { isAppLink, isAppNode } from "../../types/graph-guards";
+import { DiagramWrapper } from "../diagram-wrapper";
 
 type Props = {
   nodes: AppNode[];
@@ -74,13 +74,11 @@ export const DiagramCanvas = ({
     obj.insertedNodeKeys?.forEach((key) => {
       const nodeData = modifiedNodeMap.get(String(key));
       if (nodeData) {
-        setNodes((prev) => {
-          if (nodeIndexRef.current.has(nodeData.id)) {
-            return prev;
-          }
-          nodeIndexRef.current.set(nodeData.id, prev.length);
-          return [...prev, nodeData];
-        });
+        if (nodeIndexRef.current.has(nodeData.id)) {
+          return;
+        }
+        nodeIndexRef.current.set(nodeData.id, nodeIndexRef.current.size);
+        setNodes((prev) => [...prev, nodeData]);
       }
     });
 
@@ -94,13 +92,11 @@ export const DiagramCanvas = ({
     obj.insertedLinkKeys?.forEach((key) => {
       const linkData = modifiedLinkMap.get(String(key));
       if (linkData) {
-        setLinks((prev) => {
-          if (linkIndexRef.current.has(linkData.id)) {
-            return prev;
-          }
-          linkIndexRef.current.set(linkData.id, prev.length);
-          return [...prev, linkData];
-        });
+        if (linkIndexRef.current.has(linkData.id)) {
+          return;
+        }
+        linkIndexRef.current.set(linkData.id, linkIndexRef.current.size);
+        setLinks((prev) => [...prev, linkData]);
       }
     });
 

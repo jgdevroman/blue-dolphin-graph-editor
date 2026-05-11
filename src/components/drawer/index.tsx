@@ -1,4 +1,4 @@
-import Drawer from "@mui/material/Drawer";
+import MuiDrawer from "@mui/material/Drawer";
 
 const PANEL_WIDTH = 320;
 
@@ -8,9 +8,9 @@ type SlideProps = {
   children?: React.ReactNode;
 };
 
-export const Slide = ({ open, onExited, children }: SlideProps) => (
+export const Drawer = ({ open, onExited, children }: SlideProps) => (
   <aside>
-    <Drawer
+    <MuiDrawer
       variant="persistent"
       anchor="right"
       open={open}
@@ -24,9 +24,9 @@ export const Slide = ({ open, onExited, children }: SlideProps) => (
       }}
     >
       {children}
-    </Drawer>
+    </MuiDrawer>
 
-    <Drawer
+    <MuiDrawer
       variant="permanent"
       anchor="right"
       open
@@ -39,6 +39,6 @@ export const Slide = ({ open, onExited, children }: SlideProps) => (
       }}
     >
       {children}
-    </Drawer>
+    </MuiDrawer>
   </aside>
 );

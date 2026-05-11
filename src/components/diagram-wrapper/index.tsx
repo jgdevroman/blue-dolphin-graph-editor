@@ -1,7 +1,7 @@
 import * as go from "gojs";
 import { ReactDiagram } from "gojs-react";
 import { type RefObject, useEffect } from "react";
-import type { AppLink, AppNode } from "../types/graph";
+import type { AppLink, AppNode } from "../../types/graph";
 
 type Props = {
   diagramRef: RefObject<ReactDiagram | null>;

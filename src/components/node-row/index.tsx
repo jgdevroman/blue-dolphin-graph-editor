@@ -2,7 +2,7 @@ import ListItem from "@mui/material/ListItem";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
 import { memo } from "react";
-import type { AppNode } from "../types/graph";
+import type { AppNode } from "../../types/graph";
 
 export type NodeRowProps = {
   node: AppNode;

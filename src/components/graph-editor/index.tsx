@@ -2,13 +2,13 @@ import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import { styled } from "@mui/material/styles";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AppLink, AppNode } from "../types/graph";
-import type { NamePatch } from "../types/graph-editor";
-import { GENERATED_GRAPH } from "../utils/graphUtils";
-import { DiagramCanvas } from "./DiagramCanvas";
-import { LoadingOverlay } from "./LoadingOverlay";
-import { SidePanel } from "./SidePanel";
-import { Slide } from "./Slide";
+import type { AppLink, AppNode } from "../../types/graph";
+import type { NamePatch } from "../../types/graph-editor";
+import { GENERATED_GRAPH } from "../../utils/graphUtils";
+import { DiagramCanvas } from "../diagram-canvas";
+import { Drawer } from "../drawer";
+import { LoadingOverlay } from "../loading-overlay";
+import { SidePanel } from "../side-panel";
 
 const PANEL_WIDTH = 320;
 
@@ -122,7 +122,7 @@ export const GraphEditor = () => {
         />
         {isLoading && <LoadingOverlay />}
       </Main>
-      <Slide open={open} onExited={() => setDrawerExited(true)}>
+      <Drawer open={open} onExited={() => setDrawerExited(true)}>
         <SidePanel
           nodes={nodes}
           links={links}
@@ -134,7 +134,7 @@ export const GraphEditor = () => {
           setNodes={setNodes}
           setNamePatch={setNamePatch}
         />
-      </Slide>
+      </Drawer>
     </Box>
   );
 };

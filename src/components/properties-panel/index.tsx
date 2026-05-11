@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import type { AppNode } from "../types/graph";
+import type { AppNode } from "../../types/graph";
 
 type Props = {
   node: AppNode | null;

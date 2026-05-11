@@ -30,19 +30,6 @@ export function generateGraph(n: number): GeneratedGraph {
     addEdge(i, Math.floor(Math.random() * i));
   }
 
-  // Add extra random edges to introduce cycles.
-  const extraEdgeTarget = Math.floor(n * 0.25);
-  let attempts = 0;
-  let added = 0;
-  while (added < extraEdgeTarget && attempts < extraEdgeTarget * 20) {
-    const a = Math.floor(Math.random() * n);
-    const b = Math.floor(Math.random() * n);
-    if (a !== b && addEdge(a, b)) {
-      added++;
-    }
-    attempts++;
-  }
-
   return { nodes, links };
 }
 
