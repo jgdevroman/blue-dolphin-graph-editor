@@ -1,4 +1,4 @@
-import { generateGraph } from "./graphUtils";
+import { generateGraph } from "./graph-utils";
 
 describe("generateGraph", () => {
   it("generates 1000 nodes", () => {

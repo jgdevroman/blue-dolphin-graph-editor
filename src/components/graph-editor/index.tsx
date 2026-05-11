@@ -4,12 +4,12 @@ import { styled } from "@mui/material/styles";
 import { useCallback, useState } from "react";
 import type { AppLink, AppNode } from "../../types/graph";
 import type { NamePatch } from "../../types/graph-editor";
-import { GENERATED_GRAPH } from "../../utils/graphUtils";
+import { GENERATED_GRAPH } from "../../utils/graph-utils";
 import { DiagramCanvas } from "../diagram-canvas";
 import { Drawer } from "../drawer";
 import { LoadingOverlay } from "../loading-overlay";
 import { SidePanel } from "../side-panel";
-import { useGraphIndexRefs } from "./hooks/useGraphIndexRefs";
+import { useGraphIndexRefs } from "./hooks/use-graph-index-refs";
 
 const PANEL_WIDTH = 320;
 
