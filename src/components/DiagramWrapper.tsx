@@ -38,12 +38,18 @@ export const DiagramWrapper = ({
     const diagram = diagramRef.current?.getDiagram();
     if (diagram instanceof go.Diagram) {
       diagram.addDiagramListener("ChangedSelection", onChangedSelection);
-      diagram.addDiagramListener("InitialLayoutCompleted", handleInitialLayoutCompleted);
+      diagram.addDiagramListener(
+        "InitialLayoutCompleted",
+        handleInitialLayoutCompleted,
+      );
     }
     return () => {
       if (diagram instanceof go.Diagram) {
         diagram.removeDiagramListener("ChangedSelection", onChangedSelection);
-        diagram.removeDiagramListener("InitialLayoutCompleted", handleInitialLayoutCompleted);
+        diagram.removeDiagramListener(
+          "InitialLayoutCompleted",
+          handleInitialLayoutCompleted,
+        );
       }
     };
   }, []);

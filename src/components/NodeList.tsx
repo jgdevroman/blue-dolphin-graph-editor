@@ -19,7 +19,9 @@ export const NodeList = ({ nodes, selectedId, onSelect }: Props) => {
       setSelectedFromList(false);
       return;
     }
-    const item = listRef.current.querySelector(`[data-node-id="${selectedId}"]`);
+    const item = listRef.current.querySelector(
+      `[data-node-id="${selectedId}"]`,
+    );
     item?.scrollIntoView({ block: "center" });
   }, [selectedId]);
 

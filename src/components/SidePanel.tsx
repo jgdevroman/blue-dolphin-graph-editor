@@ -96,11 +96,7 @@ export const SidePanel = ({
           </IconButton>
         </Box>
         <Divider />
-        <NodeList
-          nodes={nodes}
-          selectedId={selectedId}
-          onSelect={onSelect}
-        />
+        <NodeList nodes={nodes} selectedId={selectedId} onSelect={onSelect} />
       </Box>
 
       {isLoading && <LoadingOverlay />}
