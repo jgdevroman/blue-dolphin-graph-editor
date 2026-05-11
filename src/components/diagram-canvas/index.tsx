@@ -38,7 +38,7 @@ export const DiagramCanvas = ({
   const suppressNextSelectionEventRef = useRef(false);
 
   /**
-   * Handles ChangedSelection events from GoJS, pushing the selected node id into React 
+   * Handles ChangedSelection events from GoJS, pushing the selected node id into React
    * state to update the side panel's selected node.
    */
   const handleChangedSelection = (e: go.DiagramEvent) => {
@@ -129,7 +129,7 @@ export const DiagramCanvas = ({
     }
   }, [selectedId]);
 
-  // Patch a single node name in GoJS coming from the side panel. 
+  // Patch a single node name in GoJS coming from the side panel.
   useEffect(() => {
     if (!namePatch) {
       return;
