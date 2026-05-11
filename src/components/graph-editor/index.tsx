@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import { styled } from "@mui/material/styles";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import type { AppLink, AppNode } from "../../types/graph";
 import type { NamePatch } from "../../types/graph-editor";
 import { GENERATED_GRAPH } from "../../utils/graphUtils";
@@ -9,6 +9,7 @@ import { DiagramCanvas } from "../diagram-canvas";
 import { Drawer } from "../drawer";
 import { LoadingOverlay } from "../loading-overlay";
 import { SidePanel } from "../side-panel";
+import { useGraphIndexRefs } from "./hooks/useGraphIndexRefs";
 
 const PANEL_WIDTH = 320;
 
@@ -44,36 +45,7 @@ export const GraphEditor = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [namePatch, setNamePatch] = useState<NamePatch | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  const nodeIndexRef = useRef<Map<string, number>>(
-    new Map(GENERATED_GRAPH.nodes.map((node, index) => [node.id, index])),
-  );
-  const linkIndexRef = useRef<Map<string, number>>(
-    new Map(GENERATED_GRAPH.links.map((link, index) => [link.id, index])),
-  );
-
-  const refreshNodeIndex = (updatedNodes: AppNode[]) => {
-    const freshIndex = new Map<string, number>();
-    updatedNodes.forEach((node, index) => {
-      freshIndex.set(node.id, index);
-    });
-    nodeIndexRef.current = freshIndex;
-  };
-
-  const refreshLinkIndex = (updatedLinks: AppLink[]) => {
-    const freshIndex = new Map<string, number>();
-    updatedLinks.forEach((link, index) => {
-      freshIndex.set(link.id, index);
-    });
-    linkIndexRef.current = freshIndex;
-  };
-
-  // On mount, populate the node/link index refs with the initial data.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: needs to run only once on mount. The refresh functions are stable and do not need to be included in the dependency array.
-  useEffect(() => {
-    refreshNodeIndex(nodes);
-    refreshLinkIndex(links);
-  }, []);
+  const { nodeIndexRef, linkIndexRef } = useGraphIndexRefs(nodes, links);
 
   const handleInitialLayoutCompleted = useCallback(() => {
     setIsLoading(false);

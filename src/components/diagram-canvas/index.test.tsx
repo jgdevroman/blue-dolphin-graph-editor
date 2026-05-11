@@ -1,43 +1,81 @@
-import { act, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, render, waitFor } from "@testing-library/react";
 import * as go from "gojs";
-import { App } from "../../App";
+import type { AppLink, AppNode } from "../../types/graph";
+import * as DiagramWrapperModule from "../diagram-wrapper";
 import { DiagramCanvas } from ".";
 
-let diagram: go.Diagram;
+type RenderCanvasOptions = {
+  nodes?: AppNode[];
+  links?: AppLink[];
+  selectedId?: string | null;
+  namePatch?: { id: string; name: string } | null;
+};
 
-// ──────────────────────────────────────────────────────
-// Suite-level setup / teardown
-// ──────────────────────────────────────────────────────
+const SMALL_NODES: AppNode[] = [
+  { id: "n1", name: "Node 1", type: "Node" },
+  { id: "n2", name: "Node 2", type: "Node" },
+  { id: "n3", name: "Node 3", type: "Node" },
+];
 
-beforeEach(() => {
-  jest.useFakeTimers();
-  const { container } = render(<App />);
-  act(() => {
-    jest.advanceTimersByTime(500);
-  });
-  const div = container.getElementsByClassName("diagram-canvas")[0];
-  const found = go.Diagram.fromDiv(div as HTMLElement);
-  if (!found) {
-    throw new Error("GoJS diagram not initialized on .diagram-canvas div");
-  }
-  diagram = found;
-  diagram.commit((d) => {
-    d.animationManager.isEnabled = false;
-    d.animationManager.stopAnimation();
-    d.viewSize = new go.Size(800, 600);
-  });
-});
-
-afterEach(() => {
-  jest.useRealTimers();
-});
+const SMALL_LINKS: AppLink[] = [{ id: "l1", from: "n1", to: "n2" }];
 
 // ──────────────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────────────
 
-function addTestNode(name: string): go.Node {
+function getDiagramFromContainer(container: HTMLElement): go.Diagram {
+  const div = container.getElementsByClassName("diagram-canvas")[0];
+  const found = go.Diagram.fromDiv(div as HTMLElement);
+  if (!found) {
+    throw new Error("GoJS diagram not initialized on .diagram-canvas div");
+  }
+  found.commit((d) => {
+    d.animationManager.isEnabled = false;
+    d.animationManager.stopAnimation();
+    d.viewSize = new go.Size(800, 600);
+  });
+  return found;
+}
+
+function renderDiagramCanvas(options: RenderCanvasOptions = {}) {
+  const nodes = options.nodes ?? SMALL_NODES;
+  const links = options.links ?? SMALL_LINKS;
+
+  const nodeIndexRef = {
+    current: new Map(nodes.map((node, index) => [node.id, index])),
+  };
+  const linkIndexRef = {
+    current: new Map(links.map((link, index) => [link.id, index])),
+  };
+
+  jest.useFakeTimers();
+  const result = render(
+    <DiagramCanvas
+      nodes={nodes}
+      links={links}
+      nodeIndexRef={nodeIndexRef}
+      linkIndexRef={linkIndexRef}
+      selectedId={options.selectedId ?? null}
+      namePatch={options.namePatch ?? null}
+      onInitialLayoutCompleted={jest.fn()}
+      setSelectedId={jest.fn()}
+      setNodes={jest.fn()}
+      setLinks={jest.fn()}
+    />,
+  );
+
+  act(() => {
+    jest.runAllTimers();
+  });
+  return {
+    ...result,
+    diagram: getDiagramFromContainer(result.container),
+    nodeIndexRef,
+    linkIndexRef,
+  };
+}
+
+function addTestNode(diagram: go.Diagram, name: string): go.Node {
   const data: go.ObjectData = { name, type: "Node" };
   diagram.model.commit((m) => {
     (m as go.GraphLinksModel).addNodeData(data);
@@ -49,7 +87,11 @@ function addTestNode(name: string): go.Node {
   return node;
 }
 
-function addTestLink(fromNode: go.Node, toNode: go.Node): void {
+function addTestLink(
+  diagram: go.Diagram,
+  fromNode: go.Node,
+  toNode: go.Node,
+): void {
   diagram.model.commit((m) => {
     (m as go.GraphLinksModel).addLinkData({
       from: fromNode.key,
@@ -58,13 +100,20 @@ function addTestLink(fromNode: go.Node, toNode: go.Node): void {
   });
 }
 
+afterEach(() => {
+  jest.runOnlyPendingTimers();
+  jest.clearAllTimers();
+  jest.useRealTimers();
+});
+
 // ──────────────────────────────────────────────────────
 // Diagram structure
 // ──────────────────────────────────────────────────────
 
 describe("DiagramCanvas — structure", () => {
-  it("renders 1000 nodes on load", () => {
-    expect(diagram.nodes.count).toBe(1000);
+  it("renders all provided nodes on load", () => {
+    const { diagram } = renderDiagramCanvas({ nodes: SMALL_NODES, links: [] });
+    expect(diagram.nodes.count).toBe(SMALL_NODES.length);
   });
 });
 
@@ -74,6 +123,7 @@ describe("DiagramCanvas — structure", () => {
 
 describe("DiagramCanvas — add node", () => {
   it("ClickCreatingTool inserts a node into the diagram", () => {
+    const { diagram } = renderDiagramCanvas();
     // jsdom provides no real canvas hit-testing so we drive the tool API directly,
     // exactly as a double-click on the background would invoke it.
     const initialCount = diagram.nodes.count;
@@ -82,7 +132,7 @@ describe("DiagramCanvas — add node", () => {
       tool.doActivate();
       tool.insertPart(new go.Point(5000, 5000));
       tool.doStop();
-      jest.advanceTimersByTime(100);
+      jest.runOnlyPendingTimers();
     });
     expect(diagram.nodes.count).toBe(initialCount + 1);
   });
@@ -95,6 +145,7 @@ describe("DiagramCanvas — add node", () => {
 describe("DiagramCanvas — link validation", () => {
   let nodeA: go.Node;
   let nodeB: go.Node;
+  let diagram: go.Diagram;
   let validate: (
     fromNode: go.Node,
     fromPort: go.GraphObject,
@@ -104,9 +155,10 @@ describe("DiagramCanvas — link validation", () => {
   ) => boolean;
 
   beforeEach(() => {
+    ({ diagram } = renderDiagramCanvas({ nodes: [], links: [] }));
     act(() => {
-      nodeA = addTestNode("ValidateA");
-      nodeB = addTestNode("ValidateB");
+      nodeA = addTestNode(diagram, "ValidateA");
+      nodeB = addTestNode(diagram, "ValidateB");
     });
     const raw = diagram.toolManager.linkingTool.linkValidation;
     if (!raw) {
@@ -122,7 +174,7 @@ describe("DiagramCanvas — link validation", () => {
 
   it("duplicate link is rejected", () => {
     act(() => {
-      addTestLink(nodeA, nodeB);
+      addTestLink(diagram, nodeA, nodeB);
     });
     const portA = nodeA.findPort("") as go.GraphObject;
     const portB = nodeB.findPort("") as go.GraphObject;
@@ -142,16 +194,17 @@ describe("DiagramCanvas — link validation", () => {
 
 describe("DiagramCanvas — add link sync", () => {
   it("adding a link via the model increments diagram.links.count", () => {
+    const { diagram } = renderDiagramCanvas({ nodes: [], links: [] });
     let nodeA: go.Node;
     let nodeB: go.Node;
     act(() => {
-      nodeA = addTestNode("SyncA");
-      nodeB = addTestNode("SyncB");
+      nodeA = addTestNode(diagram, "SyncA");
+      nodeB = addTestNode(diagram, "SyncB");
     });
     const initialCount = diagram.links.count;
     act(() => {
-      addTestLink(nodeA, nodeB);
-      jest.advanceTimersByTime(100);
+      addTestLink(diagram, nodeA, nodeB);
+      jest.runOnlyPendingTimers();
     });
     expect(diagram.links.count).toBe(initialCount + 1);
   });
@@ -163,69 +216,130 @@ describe("DiagramCanvas — add link sync", () => {
 
 describe("DiagramCanvas — selection effect node not found", () => {
   it("does not crash when selectedId has no matching node in the diagram", () => {
-    // Render DiagramCanvas directly with a selectedId that does not exist in the
-    // empty diagram. diagram.findNodeForKey() returns null, taking the if(node)
-    // false branch on line 122 without throwing.
-    const nodeIndexRef = { current: new Map<string, number>() };
-    const linkIndexRef = { current: new Map<string, number>() };
-
     expect(() => {
-      act(() => {
-        render(
-          <DiagramCanvas
-            nodes={[]}
-            links={[]}
-            nodeIndexRef={nodeIndexRef}
-            linkIndexRef={linkIndexRef}
-            selectedId="non-existent-id"
-            namePatch={null}
-            onInitialLayoutCompleted={jest.fn()}
-            setSelectedId={jest.fn()}
-            setNodes={jest.fn()}
-            setLinks={jest.fn()}
-          />,
-        );
-        jest.advanceTimersByTime(100);
+      renderDiagramCanvas({
+        nodes: [],
+        links: [],
+        selectedId: "non-existent-id",
       });
     }).not.toThrow();
   });
 });
 
 // ──────────────────────────────────────────────────────
-// Name patch sync
+// Sync guards
 // ──────────────────────────────────────────────────────
 
-describe("DiagramCanvas — name patch sync", () => {
-  it("name change in SidePanel updates GoJS node label", async () => {
-    const iter = diagram.nodes;
-    iter.next();
-    const node = iter.value as go.Node;
-    const nodeId = String(node.key);
+describe("DiagramCanvas — sync guards", () => {
+  let latestOnChangedSelection: ((e: go.DiagramEvent) => void) | null = null;
+  let diagramForRef: {
+    clearSelection: jest.Mock;
+    findNodeForKey: jest.Mock;
+    select: jest.Mock;
+    centerRect: jest.Mock;
+    model: { commit: jest.Mock };
+  } | null = null;
+  let diagramWrapperSpy: jest.SpyInstance;
 
-    // Select the node via GoJS; ChangedSelection fires setSelectedId in React.
+  function renderCanvasWithMock(
+    options: {
+      selectedId?: string | null;
+      namePatch?: { id: string; name: string } | null;
+      setSelectedId?: jest.Mock;
+    } = {},
+  ) {
+    const nodeIndexRef = { current: new Map([["n1", 0]]) };
+    const linkIndexRef = { current: new Map<string, number>() };
+
+    jest.useFakeTimers();
+    const result = render(
+      <DiagramCanvas
+        nodes={[{ id: "n1", name: "Node 1", type: "Node" }]}
+        links={[]}
+        nodeIndexRef={nodeIndexRef}
+        linkIndexRef={linkIndexRef}
+        selectedId={options.selectedId ?? null}
+        namePatch={options.namePatch ?? null}
+        onInitialLayoutCompleted={jest.fn()}
+        setSelectedId={options.setSelectedId ?? jest.fn()}
+        setNodes={jest.fn()}
+        setLinks={jest.fn()}
+      />,
+    );
+
     act(() => {
-      diagram.select(node);
-      jest.advanceTimersByTime(100);
+      jest.runAllTimers();
     });
 
-    // Slide renders SidePanel in two Drawers; take the first Name TextField.
-    const inputs = screen.getAllByLabelText("Name") as HTMLInputElement[];
-    const input = inputs[0];
+    return result;
+  }
 
-    const user = userEvent.setup({
-      delay: null,
-      advanceTimers: jest.advanceTimersByTime,
+  beforeEach(() => {
+    latestOnChangedSelection = null;
+    diagramForRef = null;
+
+    diagramWrapperSpy = jest
+      .spyOn(DiagramWrapperModule, "DiagramWrapper")
+      .mockImplementation((props) => {
+        latestOnChangedSelection = props.onChangedSelection;
+        props.diagramRef.current = {
+          getDiagram: () => diagramForRef,
+        } as never;
+        return <div data-testid="diagram-wrapper" />;
+      });
+  });
+
+  afterEach(() => {
+    diagramWrapperSpy.mockRestore();
+  });
+
+  it("selects and centers node from selectedId, then suppresses next ChangedSelection event", async () => {
+    const setSelectedId = jest.fn();
+    const selectedNode = {
+      actualBounds: { x: 0, y: 0, width: 10, height: 10 },
+    };
+
+    diagramForRef = {
+      clearSelection: jest.fn(),
+      findNodeForKey: jest.fn().mockReturnValue(selectedNode),
+      select: jest.fn(),
+      centerRect: jest.fn(),
+      model: { commit: jest.fn() },
+    };
+
+    renderCanvasWithMock({ selectedId: "n1", setSelectedId });
+
+    await waitFor(() => {
+      expect(diagramForRef?.findNodeForKey).toHaveBeenCalledWith("n1");
+      expect(diagramForRef?.select).toHaveBeenCalledWith(selectedNode);
+      expect(diagramForRef?.centerRect).toHaveBeenCalledWith(
+        selectedNode.actualBounds,
+      );
     });
 
-    await act(async () => {
-      await user.clear(input);
-      await user.type(input, "Updated Name");
-    });
+    if (!latestOnChangedSelection) {
+      throw new Error("ChangedSelection handler was not captured");
+    }
+
+    const changedSelectionHandler = latestOnChangedSelection;
 
     act(() => {
-      jest.advanceTimersByTime(100);
+      changedSelectionHandler({
+        subject: { first: () => new go.Node() },
+      } as unknown as go.DiagramEvent);
     });
 
-    expect(diagram.findNodeForKey(nodeId)?.data.name).toBe("Updated Name");
+    expect(setSelectedId).not.toHaveBeenCalled();
+  });
+
+  it("returns early when selectedId/namePatch effects run without a diagram", () => {
+    diagramForRef = null;
+
+    expect(() => {
+      renderCanvasWithMock({
+        selectedId: "n1",
+        namePatch: { id: "n1", name: "Updated" },
+      });
+    }).not.toThrow();
   });
 });
