@@ -400,6 +400,12 @@ Avoids the naive alternative (replacing the entire `nodeDataArray` on each keyst
 | Adding a canvas node appends its row to `NodeList` |
 | Name edit in properties panel updates the diagram label |
 | Drawing a link syncs the new link into React state |
+| List row click selects the corresponding GoJS node and calls `centerRect` |
+| After selecting then deselecting a node, creating a new node selects it in the list and scrolls to it |
+| After creating a link, selecting a node on the canvas highlights its list row and scrolls to it |
+| After creating a link, creating a new node selects it in the list and scrolls to it |
+
+The last four cases target the `suppressNextSelectionEventRef` guard logic. The ref can silently latch into the wrong state under sequences involving model changes (link or node creation) followed by selection events. These tests verify that the guard resets correctly across those transitions so that selection sync remains accurate after each operation.
 
 Key techniques:
 - **GoJS instance access** — `go.Diagram.fromDiv()` retrieves the live diagram from the DOM
