@@ -2,18 +2,27 @@
 
 A graph editor for visualizing and managing large node networks. Built with React, TypeScript, GoJS, MUI, and Jest.
 
-> **Status**: implementation complete. Sections marked _(TBD)_ will be filled in before final submission.
-
 ---
 ## Features
 
+### Initial graph
+
 - **1000-node graph on load** — a random spanning tree is pre-computed at module load and rendered via GoJS `ForceDirectedLayout`.
+
+### Canvas interactions
+
 - **Canvas selection** — click any node on the canvas to select it. The side-panel list scrolls to that node's row and the properties panel populates.
-- **List selection** — click any row in the side panel to select the corresponding node. The canvas pans to bring the node into view.
 - **Add node** — double-click an empty area of the canvas to place a new node at that position. The node appears immediately in both the canvas and the list.
 - **Draw link** — drag from one node to another on the canvas to create a link. Self-loops and duplicate edges are rejected.
+
+### Side panel interactions
+
+- **List selection** — click any row in the side panel to select the corresponding node. The canvas pans to bring the node into view.
 - **Rename node** — edit the name field in the properties panel. The canvas label and list row update on every keystroke with no delay.
 - **Read-only type** — the node `type` field is displayed in the properties panel but cannot be edited.
+
+### Layout
+
 - **Responsive side panel** — permanently visible on `lg`+ screens. Hidden by default on `md` and smaller, with a toggle button to open and close it.
 
 ## Quick Start
