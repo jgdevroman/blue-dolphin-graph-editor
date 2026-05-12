@@ -2,18 +2,27 @@
 
 A graph editor for visualizing and managing large node networks. Built with React, TypeScript, GoJS, MUI, and Jest.
 
-> **Status**: implementation complete. Sections marked _(TBD)_ will be filled in before final submission.
-
 ---
 ## Features
 
+### Initial graph
+
 - **1000-node graph on load** — a random spanning tree is pre-computed at module load and rendered via GoJS `ForceDirectedLayout`.
+
+### Canvas interactions
+
 - **Canvas selection** — click any node on the canvas to select it. The side-panel list scrolls to that node's row and the properties panel populates.
-- **List selection** — click any row in the side panel to select the corresponding node. The canvas pans to bring the node into view.
 - **Add node** — double-click an empty area of the canvas to place a new node at that position. The node appears immediately in both the canvas and the list.
 - **Draw link** — drag from one node to another on the canvas to create a link. Self-loops and duplicate edges are rejected.
+
+### Side panel interactions
+
+- **List selection** — click any row in the side panel to select the corresponding node. The canvas pans to bring the node into view.
 - **Rename node** — edit the name field in the properties panel. The canvas label and list row update on every keystroke with no delay.
 - **Read-only type** — the node `type` field is displayed in the properties panel but cannot be edited.
+
+### Layout
+
 - **Responsive side panel** — permanently visible on `lg`+ screens. Hidden by default on `md` and smaller, with a toggle button to open and close it.
 
 ## Quick Start
@@ -423,6 +432,31 @@ Lines        : 98.74% (236/239)
 ```
 
 Remaining branch gaps are defensive paths (`isAppNode`, `isAppLink`, `findNodeForKey`, `instanceof go.Diagram` checks) that are covered at the line level but not all false-branches are exercised in happy-path tests.
+
+---
+
+## Bug Journal
+
+### Firefox-only node duplication on initial load (production)
+
+**Symptoms** (Zen browser / Firefox, production only):
+- Creating a new node via double-click showed "Node 0" in the properties panel instead of "New Node".
+- Typing in the name field had no visible effect.
+- The node list had 2001 entries instead of 1001.
+
+**Root cause:**
+- `nodeIndexRef` was initialized inside a `useEffect([], fn)` in `useGraphIndexRefs`.
+- gojs-react's `ReactDiagram` is a class component. Its `componentDidMount` runs synchronously during the React commit phase, before any `useEffect` hooks fire.
+- During `componentDidMount`, gojs-react calls `mergeNodeDataArray()` on the GoJS model, which fires `onModelChange`. At that point `nodeIndexRef.current` was still the empty `new Map()`, so the `has()` guard in `handleModelChange` failed for all 1000 seed nodes and each was appended to React state a second time.
+- After duplication, `nodes` had 2000 entries. The `useGraphIndexRefs` effect then ran and rebuilt `nodeIndexRef` from the original 1000-node seed, giving `size === 1000`. When the user created a new node, the UUID was stored at index 1000 — but `nodes[1000]` was the duplicate of `n0` (name "Node 0"), not the new node.
+
+**Why only Firefox:** Chrome (V8) and Firefox (SpiderMonkey) process React's scheduler `MessageChannel` messages at slightly different points in their event loops. On Chrome the timing happened to flush effects before gojs-react's initial model sync; on Firefox (SpiderMonkey) it did not. This is a scheduling race — `useEffect` only guarantees execution after the browser paints, not before `componentDidMount`.
+
+**Why only production:** React Strict Mode (development only) double-invokes effects, re-populating `nodeIndexRef` before the second GoJS event pass and masking the race. The optimised production bundle exposed it.
+
+**Fix:** replaced `useEffect`-based initialization with a synchronous lazy init pattern using an `isInitialized` sentinel ref, so the map is built during the render phase before `componentDidMount` can fire.
+
+**Takeaway:** `useEffect([], fn)` is not safe for initializing data that a mounted class component's `componentDidMount` reads. Synchronous ref setup is required when mixing hook-based initialization with class-component libraries like gojs-react.
 
 ---
 
