@@ -92,11 +92,9 @@ repo-root/
     │   │   └── index.test.tsx
     │   ├── properties-panel/
     │   │   └── index.tsx                    # Editable name, read-only type, placeholder when null
-    │   ├── drawer/
-    │   │   ├── index.tsx                    # Responsive MUI Drawer (persistent on md, permanent on lg+)
-    │   │   └── index.test.tsx
-    │   └── loading-overlay/
-    │       └── index.tsx                    # Shown during initial GoJS layout
+    │   └── drawer/
+    │       ├── index.tsx                    # Responsive MUI Drawer (persistent on md, permanent on lg+)
+    │       └── index.test.tsx
     ├── App.tsx                              # ThemeProvider + GraphEditor root
     ├── app.integration.test.tsx             # End-to-end interaction tests
     └── setupTests.ts                        # jest-canvas-mock, scroll mock, jest-dom matchers
@@ -122,7 +120,7 @@ Separated into two components:
 - **`DiagramCanvas`** owns sync logic: three `useEffect` hooks patch the GoJS model when React state changes (selection, name patch, node/link arrays).
 
 Key configuration:
-- `ForceDirectedLayout` with `maxIterations=200`; frozen after `'InitialLayoutCompleted'` fires
+- `ForceDirectedLayout` with `maxIterations=200`
 - `allowDelete: false`, undo manager disabled
 - `clickCreatingTool.archetypeNodeData` handles double-click node creation
 - `linkValidation` rejects self-loops and duplicate edges in either direction (undirected graph)
@@ -146,7 +144,6 @@ const [nodes, setNodes] = useState<AppNode[]>()         // initialised from GENE
 const [links, setLinks] = useState<AppLink[]>()         // initialised from GENERATED_GRAPH
 const [selectedId, setSelectedId] = useState<string | null>(null)
 const [namePatch, setNamePatch] = useState<NamePatch | null>(null)
-const [isLoading, setIsLoading] = useState(true)
 const [open, setOpen] = useState(false)                 // drawer open state (md and smaller)
 ```
 
@@ -222,10 +219,9 @@ All three edit operations (add node, draw link, rename) are routed through `onMo
 ### Phase 5 — Scale to 1000 nodes
 - `generateGraph(1000)` with random spanning tree
 - `GENERATED_GRAPH` pre-computed at module load
-- `ForceDirectedLayout` with `maxIterations=200`; frozen after `'InitialLayoutCompleted'`
+- `ForceDirectedLayout` with `maxIterations=200`
 - `React.memo` on `NodeRow`; all callbacks stable via `useCallback`
 - `content-visibility: auto` CSS on rows
-- Loading overlay during initial layout
 
 ### Phase 6 — Tests
 - Jest + ts-jest configured with `tsconfig.test.json` (CommonJS, node resolution)

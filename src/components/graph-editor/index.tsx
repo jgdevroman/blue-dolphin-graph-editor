@@ -7,7 +7,6 @@ import type { NamePatch } from "../../types/graph-editor";
 import { GENERATED_GRAPH } from "../../utils/graph-utils";
 import { DiagramCanvas } from "../diagram-canvas";
 import { Drawer } from "../drawer";
-import { LoadingOverlay } from "../loading-overlay";
 import { SidePanel } from "../side-panel";
 import { useGraphIndexRefs } from "./hooks/use-graph-index-refs";
 
@@ -44,12 +43,7 @@ export const GraphEditor = () => {
   const [links, setLinks] = useState<AppLink[]>(() => GENERATED_GRAPH.links);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [namePatch, setNamePatch] = useState<NamePatch | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const { nodeIndexRef, linkIndexRef } = useGraphIndexRefs(nodes, links);
-
-  const handleInitialLayoutCompleted = () => {
-    setIsLoading(false);
-  };
 
   const handleOpen = () => {
     setDrawerExited(false);
@@ -88,18 +82,15 @@ export const GraphEditor = () => {
           selectedId={selectedId}
           namePatch={namePatch}
           setSelectedId={setSelectedId}
-          onInitialLayoutCompleted={handleInitialLayoutCompleted}
           setNodes={setNodes}
           setLinks={setLinks}
         />
-        {isLoading && <LoadingOverlay />}
       </Main>
       <Drawer open={open} onExited={() => setDrawerExited(true)}>
         <SidePanel
           nodes={nodes}
           nodeIndexRef={nodeIndexRef}
           selectedId={selectedId}
-          isLoading={isLoading}
           onClose={() => setOpen(false)}
           onSelect={setSelectedId}
           setNodes={setNodes}

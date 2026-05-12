@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import * as go from "gojs";
 import type { ReactDiagram } from "gojs-react";
 import { useRef } from "react";
@@ -17,11 +17,7 @@ import { DiagramWrapper } from ".";
 
 let getDiagramRefValue: () => go.Diagram | null;
 
-function Wrapper({
-  onInitialLayoutCompleted,
-}: {
-  onInitialLayoutCompleted: jest.Mock;
-}) {
+function Wrapper() {
   const diagramRef = useRef<ReactDiagram | null>({
     getDiagram: () => getDiagramRefValue(),
   } as ReactDiagram);
@@ -33,43 +29,30 @@ function Wrapper({
       skipsDiagramUpdate={false}
       onChangedSelection={jest.fn()}
       onModelChange={jest.fn()}
-      onInitialLayoutCompleted={onInitialLayoutCompleted}
     />
   );
 }
 
-describe("DiagramWrapper — null diagram guard", () => {
-  it("returns early when InitialLayoutCompleted fires and getDiagram no longer returns a Diagram", async () => {
-    const onInitialLayoutCompleted = jest.fn();
+describe("DiagramWrapper — ChangedSelection listener", () => {
+  it("registers ChangedSelection listener when diagram is available", () => {
     const diagram = new go.Diagram();
     getDiagramRefValue = () => diagram;
 
     const addListenerSpy = jest.spyOn(diagram, "addDiagramListener");
 
-    render(<Wrapper onInitialLayoutCompleted={onInitialLayoutCompleted} />);
+    render(<Wrapper />);
 
-    await waitFor(() => {
-      expect(addListenerSpy).toHaveBeenCalledWith(
-        "InitialLayoutCompleted",
-        expect.any(Function),
-      );
-    });
-
-    const initialLayoutCall = addListenerSpy.mock.calls.find(
-      ([eventName]) => eventName === "InitialLayoutCompleted",
+    expect(addListenerSpy).toHaveBeenCalledWith(
+      "ChangedSelection",
+      expect.any(Function),
     );
-    if (!initialLayoutCall) {
-      throw new Error("InitialLayoutCompleted listener was not registered");
-    }
+  });
 
-    const handler = initialLayoutCall[1] as (e: go.DiagramEvent) => void;
-
-    // Simulate ref becoming unavailable by the time the listener executes.
+  it("does not crash when getDiagram returns null on mount", () => {
     getDiagramRefValue = () => null;
 
     expect(() => {
-      handler({} as go.DiagramEvent);
+      render(<Wrapper />);
     }).not.toThrow();
-    expect(onInitialLayoutCompleted).not.toHaveBeenCalled();
   });
 });
