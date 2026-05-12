@@ -68,6 +68,15 @@ GitHub Actions runs on every push to `main` and on every PR targeting `main`. Tw
 1. Install — `bun install --frozen-lockfile`
 2. Test with coverage — `bun run test:coverage`
 
+## Deployment
+
+- Hosted on Vercel as a static site.
+- `vercel.json` at the repo root overrides the default install/build commands to use Bun instead of npm.
+- Build: `bun install` + `bun run build` (TypeScript check + Vite bundle). Output directory: `dist/`.
+- No server-side rendering, no API routes, no environment variables — Vercel serves the `dist/` folder as a static asset tree.
+- Deployed URL: [<https://blue-dolphin-assignment.vercel.app>](https://blue-dolphin-graph-editor.vercel.app/)
+
+
 ## Architecture
 
 ### Folder structure
@@ -305,11 +314,16 @@ Two components with distinct responsibilities:
 - No separate GoJS-side model to sync manually; `NodeList` and `DiagramCanvas` both read from the same arrays
 - Data flow is always unidirectional: GoJS event → React state setter → React render → GoJS patch
 
-**Name edit sync: O(1) via `NamePatch`**
+**Name edit sync: O(1) on the canvas, O(n) on the list**
 
 Typing in the name field calls `handleNameChange(id, name)`, which:
 1. Updates the `nodes` array in state — `NodeList` reflects the new name immediately
 2. Sets `namePatch: { id, name }` — a dedicated `DiagramCanvas` effect calls `diagram.model.setDataProperty()`, patching only that one node in GoJS
+
+- **Canvas update is O(1)** — `setDataProperty` touches a single node in the GoJS model
+- **List update is O(n)** — React state requires an immutable array spread to update one element, producing a new array on every keystroke
+- The overhead is negligible at 1000 nodes, and `React.memo` ensures only the affected row re-renders
+- A state management library like Zustand could make the list update O(1) by storing nodes in a map and letting components subscribe to individual entries, but that complexity is not justified at this scale
 
 Avoids the naive alternative (replacing the entire `nodeDataArray` on each keystroke), which would cause GoJS to rebuild all node visuals.
 
@@ -409,8 +423,30 @@ Remaining branch gaps are defensive paths (`isAppNode`, `isAppLink`, `findNodeFo
 
 ## AI Disclosure
 
-_(TBD)_
+- Most of the production code in this project was written with the assistance of Claude (Anthropic).
+- All AI-generated code was thoroughly reviewed before being accepted. Where the output deviated from intent or best practice, it was corrected either by manual editing or by targeted follow-up prompting.
+- The implementation was not generated in one shot. It was deliberately broken into phases, each planned independently before any code was written.
+- The process started from the original assignment brief ([`docs/senior_frontend_assignment.pdf`](docs/senior_frontend_assignment.pdf)). A full PRD ([`docs/PRD.md`](docs/PRD.md)) was produced first to elicit and solidify all requirements before touching any code.
+- From the PRD, a high-level implementation plan ([`docs/plan.md`](docs/plan.md)) was created. This divided the work into phases (scaffolding, UI shell, state wiring, canvas interactions, scale-up, tests, polish).
+- Each phase was preceded by a more detailed step-by-step plan generated for that specific phase, which was then executed and reviewed incrementally.
+- Deviations from the original plan that emerged during implementation were fed back into both the plan and the PRD, keeping those documents as the single source of truth throughout.
 
-## Trade-offs / What I'd Do Next
+## What I'd Do Next
 
-_(TBD)_
+### Features
+
+- **Delete and undo** — the graph deliberately prevents deletion and undo to avoid unexpected data loss during this iteration. Both are natural next additions once a confirmation or history mechanism is in place.
+- **"Add node" button on selection** — double-clicking an empty canvas area is not discoverable for new users. A `+` button that appears when a node is selected would lower the learning curve significantly.
+- **Node list search** — with 1000+ nodes, a filter input above the list would let users jump directly to a node by name instead of scrolling.
+- **Linked nodes in properties panel** — the properties panel currently shows only the selected node's own fields. Displaying the list of directly connected nodes would give the user useful graph context without leaving the panel.
+- **Minimap** — a small overview panel showing the full graph extent in a corner of the canvas. GoJS ships an `Overview` control that handles this with minimal setup. Becomes critical as the graph grows beyond what fits on a single screen.
+- **Node persistence** — the current iteration has no backend by design, keeping the scope focused on the frontend problem. The natural next step would be storing the graph in a database so sessions are not lost on refresh. The data model (`AppNode`, `AppLink`) is already clean enough to serialize directly.
+
+### Technical Improvements
+
+- **Component folder structure** — as the app grows, a flat `components/` folder becomes hard to navigate. A better model would be a nested structure where a component's direct children live inside its own folder, or a feature-based folder structure grouping related components together.
+- **Bun test** — the project uses Jest because it was a hard PRD requirement. Once the constraint is lifted, migrating to `bun test` (which is native to the Bun runtime and requires no extra configuration) would simplify the toolchain.
+- **Zustand for state management** — React `useState` is sufficient for this scope, but as the app grows it introduces prop drilling and forces array spreading for targeted updates like name patches. Zustand would let components subscribe to only the slices they need.
+- **Lazy-load GoJS** — GoJS is the largest dependency in the bundle. Splitting it into a dynamic import and loading it behind a `React.lazy` boundary would reduce the initial bundle size and improve time-to-interactive.
+- **End-to-end tests with Playwright** — the Jest suite covers unit and integration logic well, but a Playwright test running against a real browser would catch GoJS rendering and layout issues that jsdom cannot simulate. It would also serve as a living spec for the acceptance criteria in the PRD.
+- **Lighthouse CI** — adding a Lighthouse CI step to GitHub Actions would catch user-facing performance regressions (bundle size growth, slower paint) automatically on every PR. For React-specific regressions like unnecessary re-renders, this would be complemented by `why-did-you-render`, which logs unexpected component updates to the console and can be wired into tests.
