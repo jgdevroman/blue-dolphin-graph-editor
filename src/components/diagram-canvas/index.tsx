@@ -14,7 +14,6 @@ type Props = {
   linkIndexRef: React.RefObject<Map<string, number>>;
   selectedId: string | null;
   namePatch: NamePatch | null;
-  onInitialLayoutCompleted: () => void;
   setSelectedId: (id: string | null) => void;
   setNodes: React.Dispatch<React.SetStateAction<AppNode[]>>;
   setLinks: React.Dispatch<React.SetStateAction<AppLink[]>>;
@@ -27,7 +26,6 @@ export const DiagramCanvas = ({
   linkIndexRef,
   selectedId,
   namePatch,
-  onInitialLayoutCompleted,
   setSelectedId,
   setNodes,
   setLinks,
@@ -152,7 +150,6 @@ export const DiagramCanvas = ({
       skipsDiagramUpdate={skipsDiagramUpdate}
       onChangedSelection={handleChangedSelection}
       onModelChange={handleModelChange}
-      onInitialLayoutCompleted={onInitialLayoutCompleted}
     />
   );
 };

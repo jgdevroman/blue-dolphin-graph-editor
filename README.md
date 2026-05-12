@@ -7,7 +7,7 @@ A graph editor for visualizing and managing large node networks. Built with Reac
 ---
 ## Features
 
-- **1000-node graph on load** — a random spanning tree is pre-computed at module load and rendered via GoJS `ForceDirectedLayout`. A loading overlay is shown until the initial layout completes.
+- **1000-node graph on load** — a random spanning tree is pre-computed at module load and rendered via GoJS `ForceDirectedLayout`.
 - **Canvas selection** — click any node on the canvas to select it. The side-panel list scrolls to that node's row and the properties panel populates.
 - **List selection** — click any row in the side panel to select the corresponding node. The canvas pans to bring the node into view.
 - **Add node** — double-click an empty area of the canvas to place a new node at that position. The node appears immediately in both the canvas and the list.
@@ -100,8 +100,7 @@ src/
 │   ├── node-list/            # MUI list with React.memo rows
 │   ├── node-row/             # Memoized row; primitive props only
 │   ├── properties-panel/     # Editable name, read-only type, placeholder
-│   ├── drawer/               # Responsive MUI Drawer
-│   └── loading-overlay/      # Shown during initial GoJS layout
+│   └── drawer/               # Responsive MUI Drawer
 ├── App.tsx                   # MUI ThemeProvider + GraphEditor root
 └── app.integration.test.tsx  # Integration tests
 ```
@@ -110,7 +109,7 @@ src/
 
 | Component | Responsibility |
 |---|---|
-| `GraphEditor` | Owns all state (`nodes`, `links`, `selectedId`, `namePatch`, `isLoading`, `open`). Passes slices down as props. |
+| `GraphEditor` | Owns all state (`nodes`, `links`, `selectedId`, `namePatch`, `open`). Passes slices down as props. |
 | `DiagramWrapper` | Initializes the GoJS `Diagram` once via `useEffect([], [])`. Defines node/link templates, tools, and listeners. Never re-created on re-render. |
 | `DiagramCanvas` | Holds a ref to the `DiagramWrapper` instance. Three `useEffect` hooks patch the GoJS model when React state changes (selection, name patch, node/link arrays). |
 | `SidePanel` | Thin shell composing `NodeList` and `PropertiesPanel`. |
@@ -336,8 +335,8 @@ Avoids the naive alternative (replacing the entire `nodeDataArray` on each keyst
 | Metric | Local | Deployed | Threshold | Notes |
 |---|---|---|---|---|
 | LCP | 0.58 s | 0.35 s | < 2.5 s ✓ | LCP element is a MUI `Typography` node — app shell text paints fast even though GoJS initializes after |
-| CLS | 0 | 0 | < 0.1 ✓ | Loading overlay reserves the diagram area during GoJS init, preventing any layout shift when the canvas appears |
-| INP | 120 ms | 48 ms | < 200 ms ✓ | Measured on name field keystrokes — the most demanding interaction (state update + `NodeRow` re-render + `diagram.model.setDataProperty()` on every key). Individual keystrokes were 56–112 ms locally and 24–32 ms in production. |
+| CLS | 0 | 0 | < 0.1 ✓ | Diagram area has fixed dimensions in CSS, so the canvas slot is reserved before GoJS initializes and no layout shift occurs |
+| INP | 120 ms | 48 ms | < 200 ms ✓ | Measured on name field keystrokes — the most demanding interaction (state update + `NodeRow` re-render + `diagram.model.setDataProperty()` on every key). |
 
 **Runtime feel (manual + React Profiler):**
 

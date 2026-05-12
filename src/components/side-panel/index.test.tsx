@@ -30,7 +30,7 @@ function renderSidePanelControlled(
         nodes={nodes}
         nodeIndexRef={nodeIndexRef}
         selectedId={selectedId}
-        isLoading={false}
+
         onClose={onClose}
         onSelect={onSelect}
         setNodes={setNodes}
@@ -66,7 +66,7 @@ describe("SidePanel — rendering", () => {
           nodes={nodes}
           nodeIndexRef={emptyIndexRef}
           selectedId="z"
-          isLoading={false}
+  
           onClose={jest.fn()}
           onSelect={jest.fn()}
           setNodes={setNodes}
@@ -136,7 +136,7 @@ describe("SidePanel — name update", () => {
           nodes={nodes}
           nodeIndexRef={nodeIndexRef}
           selectedId="a"
-          isLoading={false}
+  
           onClose={jest.fn()}
           onSelect={jest.fn()}
           setNodes={setNodes}

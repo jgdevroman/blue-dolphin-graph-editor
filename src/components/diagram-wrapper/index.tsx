@@ -10,7 +10,6 @@ type Props = {
   skipsDiagramUpdate: boolean;
   onChangedSelection: (e: go.DiagramEvent) => void;
   onModelChange: (idata: go.IncrementalData, e: go.ChangedEvent) => void;
-  onInitialLayoutCompleted: () => void;
 };
 
 export const DiagramWrapper = ({
@@ -20,36 +19,19 @@ export const DiagramWrapper = ({
   skipsDiagramUpdate,
   onChangedSelection,
   onModelChange,
-  onInitialLayoutCompleted,
 }: Props) => {
-  const handleInitialLayoutCompleted = (_e: go.DiagramEvent) => {
-    const diagram = diagramRef.current?.getDiagram();
-    if (!(diagram instanceof go.Diagram)) {
-      return;
-    }
-    // Prevent re-layout on subsequent model changes (node additions, name patches).
-    diagram.layout.isOngoing = false;
-    onInitialLayoutCompleted();
-  };
 
   // Add/remove listeners on mount only.
   // biome-ignore lint/correctness/useExhaustiveDependencies: handlers are stable
   useEffect(() => {
     const diagram = diagramRef.current?.getDiagram();
     if (diagram instanceof go.Diagram) {
+      diagram.layout.isOngoing = false;
       diagram.addDiagramListener("ChangedSelection", onChangedSelection);
-      diagram.addDiagramListener(
-        "InitialLayoutCompleted",
-        handleInitialLayoutCompleted,
-      );
     }
     return () => {
       if (diagram instanceof go.Diagram) {
         diagram.removeDiagramListener("ChangedSelection", onChangedSelection);
-        diagram.removeDiagramListener(
-          "InitialLayoutCompleted",
-          handleInitialLayoutCompleted,
-        );
       }
     };
   }, []);
