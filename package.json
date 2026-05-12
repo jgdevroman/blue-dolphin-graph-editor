@@ -1,5 +1,5 @@
 {
-  "name": "blue-dolphin-assignment",
+  "name": "blue-dolphin-graph-editor",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,8 +9,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "preview": "vite preview",
-    "test": "bunx jest",
-    "test:coverage": "bunx jest --coverage"
+    "test": "jest",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -34,6 +34,7 @@
     "jest": "^30.4.2",
     "jest-canvas-mock": "^2.5.2",
     "jest-environment-jsdom": "^30.4.1",
+    "rollup-plugin-visualizer": "^7.0.1",
     "ts-jest": "^29.4.9",
     "typescript": "~6.0.2",
     "vite": "^8.0.10"

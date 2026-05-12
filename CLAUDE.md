@@ -61,7 +61,6 @@ type AppLink = { id: string; from: string; to: string }
 - **`React.memo` on list rows** — `NodeRow` is memoized; keep its props as primitives (`id`, `name`, `isSelected`) so reference equality works.
 - **Stable callbacks** — all callbacks passed to memoized children must be wrapped in `useCallback` with correct deps. An unstable prop reference defeats `memo`.
 - **`content-visibility: auto`** on each `NodeRow` for off-screen paint skipping.
-- **`startTransition`** for low-priority state updates (e.g. selection from canvas drag).
 
 ## GoJS Sync Pattern
 
