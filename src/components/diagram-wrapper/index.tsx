@@ -20,7 +20,6 @@ export const DiagramWrapper = ({
   onChangedSelection,
   onModelChange,
 }: Props) => {
-
   // Add/remove listeners on mount only.
   // biome-ignore lint/correctness/useExhaustiveDependencies: handlers are stable
   useEffect(() => {
