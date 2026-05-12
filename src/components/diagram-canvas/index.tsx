@@ -1,7 +1,7 @@
 import * as go from "gojs";
 import type { ReactDiagram } from "gojs-react";
 import type React from "react";
-import { startTransition, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AppLink, AppNode } from "../../types/graph";
 import type { NamePatch } from "../../types/graph-editor";
 import { isAppLink, isAppNode } from "../../types/graph-guards";
@@ -53,11 +53,9 @@ export const DiagramCanvas = ({
     suppressNextSelectionEventRef.current = true;
     const firstSelected = e.subject.first();
     // to make the selection feel snappier, give the selectedId update lower priority so that it does not block the canvas when the node is being dragged around.
-    startTransition(() => {
-      setSelectedId(
-        firstSelected instanceof go.Node ? String(firstSelected.key) : null,
-      );
-    });
+    setSelectedId(
+      firstSelected instanceof go.Node ? String(firstSelected.key) : null,
+    );
   };
 
   /**

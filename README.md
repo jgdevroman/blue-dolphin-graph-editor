@@ -1,160 +1,284 @@
-# BlueDolphin Diagram Editor
+# BlueDolphin Graph Editor
 
-A diagram editor for visualizing and managing large node networks. Built with React, TypeScript, GoJS, MUI, and Jest.
+A graph editor for visualizing and managing large node networks. Built with React, TypeScript, GoJS, MUI, and Jest.
 
-> **Status**: in progress. Sections marked _(TBD)_ will be filled in as the implementation progresses through the phases described in `docs/plan.md`.
+> **Status**: implementation complete. Sections marked _(TBD)_ will be filled in before final submission.
 
 ---
+## Features
+
+- **1000-node graph on load** — a random spanning tree is pre-computed at module load and rendered via GoJS `ForceDirectedLayout`. A loading overlay is shown until the initial layout completes.
+- **Canvas selection** — click any node on the canvas to select it. The side-panel list scrolls to that node's row and the properties panel populates.
+- **List selection** — click any row in the side panel to select the corresponding node. The canvas pans to bring the node into view.
+- **Add node** — double-click an empty area of the canvas to place a new node at that position. The node appears immediately in both the canvas and the list.
+- **Draw link** — drag from one node to another on the canvas to create a link. Self-loops and duplicate edges are rejected.
+- **Rename node** — edit the name field in the properties panel. The canvas label and list row update on every keystroke with no delay.
+- **Read-only type** — the node `type` field is displayed in the properties panel but cannot be edited.
+- **Responsive side panel** — permanently visible on `lg`+ screens. Hidden by default on `md` and smaller, with a toggle button to open and close it.
 
 ## Quick Start
 
+**Bun (recommended):**
+
 ```bash
-bun install
-bun run dev
-bun run test
-bun run test:coverage
+bun install           # install dependencies
+bun run dev           # start dev server (http://localhost:5173)
+bun run build         # type-check + production build
+bun run preview       # serve the production build locally
+bun run test          # run Jest test suite
+bun run test:coverage # run tests with coverage report
 ```
+
+**npm:**
+
+```bash
+npm install           # install dependencies
+npm run dev           # start dev server (http://localhost:5173)
+npm run build         # type-check + production build
+npm run preview       # serve the production build locally
+npm test              # run Jest test suite
+npm run test:coverage # run tests with coverage report
+```
+
 
 ## Tech Stack
 
-| Concern              | Choice                        | Notes                                                                                               |
-| -------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------- |
-| Bundler / dev server | Vite + `@vitejs/plugin-react` | Oxc-based plugin; simpler default over the SWC variant, no meaningful perf difference at this scale |
-| Language             | TypeScript 6 strict mode      | Enabled by default in the `react-ts` Vite template                                                  |
-| Diagram engine       | GoJS 3 (trial)                | Watermark visible; no license required for this assignment                                          |
-| UI components        | MUI 9 + Emotion               | Side panel, buttons, and layout primitives                                                          |
-| Package manager      | Bun                           | Faster installs; fully compatible with npm (`npm install && npm run dev` also works)                |
-| Linter / formatter   | Biome                         | Single tool replacing ESLint + Prettier; zero config, fast, TypeScript-aware                        |
-| Test runner          | Jest + ts-jest                | Required by the assignment spec                                                                     |
+| Concern | Choice | Notes |
+|---|---|---|
+| Bundler / dev server | Vite + `@vitejs/plugin-react` | Oxc-based plugin; no meaningful perf difference vs SWC at this scale |
+| Language | TypeScript 6 strict mode | |
+| Graph engine | GoJS 3 (trial) | Watermark visible; no license required for this assignment |
+| UI components | MUI 9 + Emotion | Side panel, buttons, layout primitives |
+| Package manager | Bun | Faster installs; npm-compatible |
+| Linter / formatter | Biome | Replaces ESLint + Prettier; zero config, TypeScript-aware |
+| Test runner | Jest + ts-jest | Hard project requirement (NFR-7) |
 
-**React Compiler — skipped.** The compiler is designed for codebases that haven't manually applied `memo`/`useCallback`. This project does the opposite: explicit `React.memo` and stable callbacks are a deliberate architecture choice that demonstrates the optimization reasoning. Enabling the compiler on top would make that reasoning invisible.
+**React Compiler — skipped.** The compiler targets codebases that haven't manually applied `memo`/`useCallback`. This project does the opposite: explicit memoization is a deliberate architecture choice that demonstrates the optimization reasoning. Enabling the compiler would make that reasoning invisible.
 
 ## CI
 
-A GitHub Actions workflow runs on every push to `main` and on every push to a pull request targeting `main`. The pipeline must pass before merging:
+GitHub Actions runs on every push to `main` and on every PR targeting `main`. Two parallel jobs:
 
-1. **Install** — `bun install --frozen-lockfile`
-2. **Lint** — `biome check .` (formatting + lint rules)
-3. **Build** — `tsc -b && vite build` (type check + bundle)
+**`check` job:**
+1. Install — `bun install --frozen-lockfile`
+2. Lint — `bun run lint`
+3. Build — `bun run build`
 
-To enforce this as a merge gate, enable branch protection on `main` in GitHub Settings and require the `check` status to pass.
+**`test` job:**
+1. Install — `bun install --frozen-lockfile`
+2. Test with coverage — `bun run test:coverage`
 
 ## Architecture
 
-_(TBD — folder map and sync pattern diagram once components are in place)_
+### Folder structure
+
+```
+src/
+├── types/
+│   ├── graph.ts              # AppNode, AppLink interfaces
+│   ├── graph-editor.ts       # NamePatch type
+│   └── graph-guards.ts       # isAppNode, isAppLink type guards
+├── utils/
+│   └── graph-utils.ts        # generateGraph(), GENERATED_GRAPH constant
+├── components/
+│   ├── graph-editor/
+│   │   ├── index.tsx         # Root state container — owns all app state
+│   │   └── hooks/
+│   │       └── use-graph-index-refs.ts  # O(1) node/link index maps as refs
+│   ├── diagram-canvas/       # GoJS sync logic: selection, name patch, model changes
+│   ├── diagram-wrapper/      # GoJS diagram initialization (runs once)
+│   ├── side-panel/           # Composes NodeList + PropertiesPanel
+│   ├── node-list/            # MUI list with React.memo rows
+│   ├── node-row/             # Memoized row; primitive props only
+│   ├── properties-panel/     # Editable name, read-only type, placeholder
+│   ├── drawer/               # Responsive MUI Drawer
+│   └── loading-overlay/      # Shown during initial GoJS layout
+├── App.tsx                   # MUI ThemeProvider + GraphEditor root
+└── app.integration.test.tsx  # Integration tests
+```
+
+### Component responsibilities
+
+| Component | Responsibility |
+|---|---|
+| `GraphEditor` | Owns all state (`nodes`, `links`, `selectedId`, `namePatch`, `isLoading`, `open`). Passes slices down as props. |
+| `DiagramWrapper` | Initializes the GoJS `Diagram` once via `useEffect([], [])`. Defines node/link templates, tools, and listeners. Never re-created on re-render. |
+| `DiagramCanvas` | Holds a ref to the `DiagramWrapper` instance. Three `useEffect` hooks patch the GoJS model when React state changes (selection, name patch, node/link arrays). |
+| `SidePanel` | Thin shell composing `NodeList` and `PropertiesPanel`. |
+| `NodeList` | Renders all 1000 rows. Each `NodeRow` is `React.memo`-wrapped with primitive props so unchanged rows skip reconciliation. |
+| `PropertiesPanel` | Editable name field and read-only type. Shows a placeholder when nothing is selected. |
+| `Drawer` | Wraps MUI `Drawer`. Switches between `persistent` (md and smaller) and `permanent` (lg+). |
+
+### Data flow
+
+React state is the single source of truth. GoJS is a controlled output.
+
+**Canvas to side panel:**
+
+```
+GoJS event (node click, draw link, double-click)
+  └─▶ handleModelChange / handleChangedSelection
+        └─▶ setNodes / setLinks / setSelectedId
+              └─▶ React re-render
+                    └─▶ NodeList highlights row, scrolls to it
+                    └─▶ PropertiesPanel populates
+```
+
+**Side panel to canvas:**
+
+```
+User interaction (row click, name edit)
+  └─▶ setSelectedId / setNamePatch
+        └─▶ React re-render
+              └─▶ DiagramCanvas useEffect runs
+                    └─▶ diagram.select() + diagram.centerRect()   (selection)
+                    └─▶ diagram.model.setDataProperty()           (name patch)
+```
+
+GoJS never writes back after emitting an event. The `skipsDiagramUpdate` flag on `ReactDiagram` and the `suppressNextSelectionEventRef` ref guard against feedback loops.
 
 ---
 
 ## Key Decisions
 
-### Efficient list rendering: `React.memo` + `content-visibility`, not custom windowing
+### Efficient list rendering: `React.memo` + `content-visibility`
 
-The spec says "efficient rendering (no external virtualization libraries)." That rules out `react-window` and friends, but it doesn't require us to write our own. The interesting question is: what's the actual bottleneck at 1000 items, and where does it live?
+The spec forbids external virtualization libraries. The real bottleneck at 1000 items is React reconciliation: without intervention, each state change causes React to diff the entire list.
 
-**The actual bottleneck is React reconciliation, not browser scroll.** Every time the `nodes` array changes (selection sync from canvas, adding a node, editing a name), React walks the entire list to diff. Without intervention that's a ~30-80 ms pause per interaction. Browser paint of 1000 small `<li>` elements is comparatively cheap.
+**Solution: solve it at the layer it lives.**
 
-So the design solves the problem at the layer it lives:
-
-- **React layer**: `React.memo` on the row component so unchanged rows skip reconciliation entirely. Stable callbacks (`useCallback`) so prop equality holds. Row props are primitives only (`id`, `name`, `isSelected`) — never the full `nodes` array.
-- **Browser layer**: `content-visibility: auto; contain-intrinsic-size: 0 48px` on each row so the browser skips paint and layout for off-screen items. ~93% global support as of 2026.
+- `React.memo` on `NodeRow` — unchanged rows skip reconciliation entirely
+- `onSelect` and `setSelectedFromList` are stable references (React state dispatchers) — no `useCallback` needed; unstable refs would silently defeat `memo`
+- `node` prop is a stable object reference — the `nodes` array item is only replaced when that specific node is modified, so reference equality holds for all unaffected rows
+- `isSelected` is a boolean computed per row — only the previously and newly selected rows change value and re-render
+- `content-visibility: auto; contain-intrinsic-size: 0 48px` on each row — browser skips paint and layout for off-screen items (~93% global support)
 
 **Approaches considered:**
 
-| Approach                                       | Why I considered it                                                                                      | Why I didn't pick it                                                                                                                                                                                                    |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`react-window` / `react-virtual`**           | Industry standard, well-tested                                                                           | Spec forbids external virtualization libraries                                                                                                                                                                          |
-| **Hand-rolled windowing (custom scroll math)** | Solves both DOM size and React reconciliation                                                            | Functionally equivalent to reimplementing `react-window`. The exercise is "make React efficient at 1000 items," not "write a virtualization library." `memo` + `content-visibility` is the more idiomatic React answer. |
-| **`IntersectionObserver` lazy mount**          | Native browser API                                                                                       | Doesn't solve the React reconciliation cost — placeholders still mount                                                                                                                                                  |
-| **Pagination** ("Load more" / page N of M)     | Trivial to implement, solves perf                                                                        | Changes UX from "scrollable list" the spec implies                                                                                                                                                                      |
-| **`React.memo` + `content-visibility` ✅**     | Solves the actual bottleneck (reconciliation) at the right layer; lets the browser handle paint natively | —                                                                                                                                                                                                                       |
+| Approach | Why not chosen |
+|---|---|
+| `react-window` / `react-virtual` | Spec forbids external virtualization libraries |
+| Hand-rolled windowing | Functionally equivalent to reimplementing `react-window`; more complex to maintain |
+| `IntersectionObserver` lazy mount | Doesn't solve React reconciliation cost — placeholders still mount |
+| Pagination | Changes UX from a continuous scrollable list |
 
-### Responsive side panel: persistent drawer, not temporary
+**Trade-off of skipping windowing:**
 
-The side panel uses MUI's persistent drawer variant on small screens rather than temporary (modal). A temporary drawer overlays the canvas; a persistent one slides in and the canvas adjusts alongside it. This keeps the canvas visible and avoids the overlay pattern that makes the two areas feel unrelated.
+- All 1000 DOM nodes are mounted at once. Windowing would reduce that to the visible slice (~20-30 rows), so memory and initial mount time would scale with viewport size rather than list length.
+- `React.memo` eliminates the reconciliation cost on updates; `content-visibility: auto` skips paint and layout for off-screen rows. The DOM nodes still exist, but render cost is contained.
+- At 1000 items the trade-off is acceptable. Hand-rolled windowing adds real complexity: scroll position tracking, visible range computation, placeholder height management for accurate scrollbar behavior. That complexity is not justified here but would become necessary at higher amount of nodes.
+
+---
+
+### Responsive side panel: persistent drawer for mobile view, not temporary
+
+- **Temporary** drawer overlays the canvas — the two areas feel unrelated
+- **Persistent** drawer slides in alongside the canvas — both surfaces stay visible
 
 **Breakpoint behavior:**
 
-| Screen | Drawer variant | Panel width | Canvas |
-|--------|---------------|-------------|--------|
-| `xs` (< 600 px) | Persistent | `100vw` — full screen | Hidden behind panel when open |
-| `sm` – `md` (600 – 900 px) | Persistent | 320 px fixed | Remains visible |
-| `md`+ (> 900 px) | Permanent | 320 px fixed | Always alongside panel |
+| Screen | Drawer variant | Default state | Toggle button |
+|---|---|---|---|
+| `xs` – `md` (< 1200 px) | Persistent | Hidden | Visible |
+| `lg`+ (≥ 1200 px) | Permanent | Always visible | Hidden |
 
-The toggle button is hidden while the drawer is closing and only reappears once the exit transition finishes (`slotProps.transition.onExited`), avoiding a jarring overlap between the button and the sliding panel.
+- Toggle button hidden during the close transition; reappears only after `slotProps.transition.onExited` fires — prevents overlap between button and sliding panel
+- Panel is `<aside>`, canvas is `<main>` — matches semantic intent
 
-The panel is wrapped in `<aside>` rather than being placed inside `<main>`. It is supplementary to the canvas (not primary content), which matches the semantic intent of `<aside>`. The canvas itself lives in `<main>`.
+**Responsive switch: JS media query over CSS `display`**
 
-### DiagramWrapper pattern: initialization separate from UI logic
+- Initial approach rendered both drawer variants simultaneously and hid one with `display: none`. With 1000+ `NodeRow` items, this doubled the mounted DOM node count and increased memory and layout cost.
+- Switched to `useMediaQuery` (MUI) so only one variant is mounted at a time. The other is unmounted entirely at the breakpoint boundary.
+- **Trade-off:** `useMediaQuery` adds a JS `matchMedia` listener that re-renders on breakpoint change. The runtime cost is negligible compared to the DOM overhead of duplicating a 1000-item list.
 
-`DiagramWrapper` follows the same component split used in the official `gojs-react-basic` example. The wrapper owns everything that only needs to run once: `initDiagram` (the GoJS diagram factory) and the `ChangedSelection` listener setup, both in effects with `[]` deps. `DiagramCanvas` sits above it and owns the React state and business logic, accessing the diagram instance through the `diagramRef` prop it passes down. This keeps GoJS initialization concerns out of the stateful layer and makes both components easier to reason about in isolation.
+---
 
-### Canvas-driven node and link creation: GoJS built-in tools, synced via `onModelChange`
+### GoJS integration: hooks-first, then gojs-react
 
-Node and link creation is handled entirely by GoJS built-in tools, not by React event handlers:
+- **Phase 1 (hooks only):** `DiagramCanvas` rendered a plain `<div ref={divRef} />`. A single `useEffect` with empty deps instantiated `go.Diagram` directly, defined templates, wired `addDiagramListener("ChangedSelection", ...)`, and loaded initial data — all in one block. A single `isUpdatingFromDiagram` ref guarded both feedback-loop scenarios. Separate effects handled name patching and selection sync.
+- **Phase 2 (gojs-react):** Replaced the raw `<div>` with `<ReactDiagram>`. `onModelChange` (delivers structured `IncrementalData`) and `onChangedSelection` replaced the imperative listener calls. The single loop-guard ref was split into two targeted guards: `skipsDiagramUpdate` (state prop, prevents `ReactDiagram` from re-ingesting data it just emitted) and `suppressNextSelectionEventRef` (ref, suppresses the synchronous `ChangedSelection` echo GoJS fires during `diagram.select()`).
+- The core sync pattern — React state as source of truth, GoJS patched via `diagram.model.commit()` — did not change. The migration was a surface change in wiring, not architecture.
 
-- **Node creation** — `clickCreatingTool.archetypeNodeData` stamps a node into the GoJS model on background double-click. No custom event listener is needed.
-- **Link creation** — the `LinkingTool` activates automatically when the user drags from a node's border. This requires `portId: ""` on the shape; without it, GoJS does not recognize the shape as a port and the tool never starts.
+**Why gojs-react was the better fit:**
 
-GoJS fires `onModelChange` (via `go.IncrementalData`) after every model transaction. `DiagramCanvas.handleModelChange` reads `insertedNodeKeys` / `insertedLinkKeys` and the accompanying `modifiedNodeData` / `modifiedLinkData` to sync new items into React state. `setSkipsDiagramUpdate(true)` is set immediately after so ReactDiagram does not push the same data back into GoJS on the following re-render.
+- `onModelChange` delivers structured `go.IncrementalData` (`insertedNodeKeys`, `insertedLinkKeys`) instead of raw GoJS events, which is the exact shape the sync logic needs.
+- `skipsDiagramUpdate` must be state, not a ref, because `ReactDiagram` reads it as a prop. A ref mutation does not trigger a re-render, so the prop would never update and GoJS would not see the skip instruction.
+- The single `isUpdatingFromDiagram` ref was too coarse to handle two distinct feedback-loop scenarios. The gojs-react version splits it into `skipsDiagramUpdate` (blocks `ReactDiagram` from re-ingesting model data) and `suppressNextSelectionEventRef` (suppresses the synchronous echo `ChangedSelection` GoJS fires during `diagram.select()`).
+- Initialization and sync concerns were entangled in one large effect. The `gojs-react` component boundary made the split natural: `DiagramWrapper` owns initialization, `DiagramCanvas` owns sync.
 
-The `onModelChange` also fires during the initial model load when ReactDiagram first seeds GoJS with the `nodeDataArray` prop. Without a guard this would double-add all seed nodes. The fix is an existence check in the updater: if the id is already in `prev`, return `prev` unchanged.
+---
 
-### Undirected graph enforcement: `linkValidation` on the `LinkingTool`
+### DiagramWrapper pattern: initialization separate from sync logic
 
-`diagram.toolManager.linkingTool.linkValidation` is set to a function that calls `fromNode.findLinksBetween(toNode)`. This method counts links in both directions, so attempting to draw B→A when A→B already exists is rejected. Self-links (same node as source and target) are also rejected in the same check. This keeps the graph undirected without needing to inspect link direction at all.
+Two components with distinct responsibilities:
 
-### Selection sync: scroll-to-node in list and canvas jump
+- **`DiagramWrapper`** — owns GoJS initialization (`initDiagram`, listener setup). Runs once via `useEffect([], [])`. Never re-created on re-render.
+- **`DiagramCanvas`** — owns React state and sync logic. Accesses the diagram instance via `diagramRef`. Three `useEffect` hooks patch the GoJS model when state changes (selection, name patch, node/link arrays).
 
-Selecting a node from either the side panel list or the canvas keeps the other surface in sync. Two separate behaviors are involved: scrolling the list row into view, and panning the canvas to center on the node.
+---
 
-**List scroll on selection**
+### Canvas-driven node and link creation: GoJS built-in tools + `onModelChange`
 
-`NodeList` holds a `ref` on the MUI `<List>` element and a `useEffect` on `selectedId`. When `selectedId` changes the effect queries `[data-node-id="${selectedId}"]` inside the list and calls `scrollIntoView({ block: "center" })`. The `data-node-id` attribute is set on each `NodeRow`'s `<ListItem>`.
+- **Node creation** — `clickCreatingTool.archetypeNodeData` stamps a node on background double-click. No custom event listener needed.
+- **Link creation** — `LinkingTool` activates on drag from a node's border. Requires `portId: ""` on the shape; without it GoJS does not recognize the shape as a port.
+- `onModelChange` (via `go.IncrementalData`) fires after every model transaction. `handleModelChange` reads `insertedNodeKeys` / `insertedLinkKeys` and syncs new items into React state.
+- `setSkipsDiagramUpdate(true)` set immediately after sync — prevents `ReactDiagram` from pushing the same data back into GoJS on the next render.
+- Initial model load also fires `onModelChange`. Guard: if the id already exists in `prev`, return `prev` unchanged — prevents double-adding seed nodes.
 
-The scroll is suppressed when the selection originated from the list itself (clicking a row). A `selectedFromList` state flag is set in the row's `onClick` and checked at the top of the effect. Using state rather than a ref here means the flag read is correctly captured in the effect closure; the flag is reset on every effect run regardless of path.
+---
 
-**Canvas pan on panel selection**
+### Undirected graph enforcement: `linkValidation`
 
-`DiagramCanvas` calls `diagram.centerRect(node.actualBounds)` inside the `selectedId` effect when syncing React state into GoJS. This is only reached when `skipsDiagramUpdate` is `false`, meaning the selection was driven from React (the panel), not from a canvas click. Canvas-click selections set `skipsDiagramUpdate = true` in `handleChangedSelection`, which causes the effect to return early before reaching `centerRect`.
+`diagram.toolManager.linkingTool.linkValidation` calls `fromNode.findLinksBetween(toNode)`:
 
-**Two-ref guard architecture**
+- Counts links in **both directions** — drawing B→A when A→B exists is rejected
+- Self-links rejected in the same check
+- No need to inspect link direction anywhere else in the codebase
 
-The two-way sync between React and GoJS requires two separate guards. They serve opposite directions and have different timing constraints:
+---
+
+### Selection sync: list scroll and canvas pan
+
+**List scroll (canvas → list):**
+- `NodeList` holds a `ref` on the MUI `<List>` and a `useEffect` on `selectedId`
+- On change: queries `[data-node-id="${selectedId}"]`, calls `scrollIntoView({ block: "center" })`
+- Scroll suppressed when selection originated from the list itself — `selectedFromList` state flag set in `NodeRow.onClick`, checked at the top of the effect
+
+**Canvas pan (list → canvas):**
+- `DiagramCanvas` calls `diagram.centerRect(node.actualBounds)` inside the `selectedId` effect
+- Only reached when `skipsDiagramUpdate` is `false` (selection driven from React, not GoJS)
+
+**Two-ref guard architecture** — prevents sync loops:
 
 | Guard | Type | Set by | Read by | Purpose |
 |---|---|---|---|---|
-| `skipsDiagramUpdate` | state | `handleChangedSelection`, `handleModelChange` | selection sync effect | Prevents `centerRect` from running when GoJS drove the selection. Also passed as prop to `ReactDiagram` to prevent it from re-applying `nodeDataArray` back into GoJS after model mutations. |
-| `suppressNextSelectionEventRef` | ref | selection sync effect (before `diagram.select()`) | `handleChangedSelection` | Suppresses the echo `ChangedSelection` event GoJS fires synchronously during `diagram.select()`, which would otherwise set `skipsDiagramUpdate = true` and corrupt the next panel selection. |
+| `skipsDiagramUpdate` | state | `handleChangedSelection`, `handleModelChange` | `ReactDiagram` (prop) | Passed as prop to `ReactDiagram` to block re-applying `nodeDataArray` after GoJS-driven model mutations. |
+| `suppressNextSelectionEventRef` | ref | `handleChangedSelection` (on canvas click), selection sync effect (before `diagram.select()`) | selection sync effect, `handleChangedSelection` | Prevents the selection effect from calling `diagram.select()` + `centerRect` when GoJS drove the selection, and suppresses the echo `ChangedSelection` GoJS fires synchronously during `diagram.select()`. |
 
-`suppressNextSelectionEventRef` must be a ref, not state, because GoJS fires `ChangedSelection` synchronously inside the `diagram.select()` call, before the current effect returns. Any state update set before `diagram.select()` would not be visible in the handler's closure at that moment.
-
-`skipsDiagramUpdate` must remain state because it is passed as a prop to `ReactDiagram`. A ref change does not trigger a re-render, so `ReactDiagram` would never see the updated value and would re-apply `nodeDataArray` into GoJS after every model mutation, causing duplicate nodes and links.
-
-**The double-fire bug and why `skipsDiagramUpdate` is not a dependency of the selection effect**
-
-The selection sync effect depends only on `selectedId`, not on `skipsDiagramUpdate`. If `skipsDiagramUpdate` were in the dependency array, removing it from the array would cause the effect to fire twice on every canvas click: once when `selectedId` changes (sees `skipsDiagramUpdate = true`, resets it, returns early), then again when `skipsDiagramUpdate` resets to `false` (now falls through to `diagram.select()` and `centerRect`). The biome exhaustive-deps rule is suppressed with an explanation at the call site.
 
 ---
 
 ### GoJS layout: ForceDirected, capped, then frozen
 
-_(TBD — to be filled in during Phase 5)_
+**Why ForceDirectedLayout:**
 
-### Barabási-Albert topology for the seed graph
+- The graph has no inherent hierarchy or flow. `ForceDirectedLayout` clusters related nodes naturally via link attraction and node repulsion — `TreeLayout`, `LayeredDigraphLayout`, and `CircularLayout` all assume structure that isn't present.
+- Runs once on load, then node positions are frozen. Users can drag freely; the simulation does not re-run.
 
-_(TBD — to be filled in during Phase 5)_
+**Why `isVirtualized` was not enabled:**
+
+- GoJS already culls off-screen nodes during canvas redraws natively. `isVirtualized` skips adding off-screen nodes to the model entirely, but requires managing explicit node bounds upfront and keeping them in sync on layout changes.
+- At 1000 nodes, native culling is sufficient. `isVirtualized` is worthwhile at much larger graph sizes where even model overhead becomes a factor.
+
+---
 
 ### Node and link state: arrays in state, index maps as refs
 
-`nodes` and `links` in `GraphEditor` are `AppNode[]` and `AppLink[]` arrays. Alongside them, two `useRef<Map<string, number>>` refs (`nodeIndexRef`, `linkIndexRef`) map each id to its position in the array.
+**Why `AppNode[]` / `AppLink[]` arrays, not `Map<string, T>` in state:**
+- GoJS and `NodeList` both consume arrays — storing maps required a `useMemo` spread on every render per consumer
+- Arrays in state means the data is already in the shape every consumer needs
 
-**Why arrays in state, not `Map<string, T>`**
-
-The initial implementation stored nodes and links as `Map<string, AppNode>` and `Map<string, AppLink>` in React state. GoJS and `NodeList` both need arrays, so every render that consumed the data ran `useMemo(() => [...nodes.values()], [nodes])` to convert — one spread per consumer per state change. With arrays in state, those conversions disappear entirely. The data is already in the shape every consumer needs.
-
-**Why `useRef` for the index maps, not state or module-level variables**
-
-Three options were considered:
+**Why `useRef` for the index maps, not `useState` or module-level variables:**
 
 | Option | Triggers re-render | Per-instance |
 |---|---|---|
@@ -162,50 +286,60 @@ Three options were considered:
 | `useRef` | No | Yes |
 | Module-level variable | No | No (shared across all instances) |
 
-The index maps are a derived lookup cache, not source-of-truth data. Mutating them should not trigger re-renders. Module-level variables would be shared if `GraphEditor` were ever mounted more than once (tests, multi-panel layouts). `useRef` gives per-instance mutable storage that is invisible to React's render cycle.
+- Index maps are a derived lookup cache, not source-of-truth data — mutations should not trigger re-renders
+- Module-level variables would be shared if `GraphEditor` is mounted more than once (tests, multi-panel layouts)
 
-**O(1) lookups**
+**O(1) lookups:** `nodes[nodeIndexRef.current.get(id)]` — same complexity as `Map.get`, no extra iteration.
 
-Operations that previously needed `map.get(id)` now use `nodes[nodeIndexRef.current.get(id)]` — still O(1). For insertions, the index map is appended with the new item's position (`prev.length`) inside the state updater before returning the new array. For deletions (not yet implemented), a full index rebuild via `refreshNodeIndex`/`refreshLinkIndex` is in place.
+**Trade-off: dual data structures**
 
-### Single source of truth in React state, feedback-loop guard
+- Arrays and index maps hold the same data in two forms. Every mutation (add node, rename) must update both, adding sync overhead on every write.
+- The payoff is O(1) reads on every GoJS event (selection changes, model updates reference nodes by key). At 1000 nodes, `Array.find()` on each event is measurably slower.
+- The alternative — arrays only with `Array.find()` — is simpler but trades read performance for write simplicity. At this scale the read cost dominates, so the dual structure is justified.
 
-React state (`nodes`, `links`, `selectedId`) is the single source of truth. GoJS is a controlled output — it receives data and reports events, but never owns state. This means:
+---
 
-- **No duplicated state.** The node list and the diagram canvas both read from the same `nodes` array in `GraphEditor`. There is no separate GoJS-side model that needs to be kept in sync manually.
-- **Unidirectional data flow for selection.** When the user clicks a node on the canvas, GoJS fires `ChangedSelection`, which calls `onSelectionChange`, which calls `setSelectedId` in `GraphEditor`. React re-renders, passes the new `selectedId` down to both `NodeList` (highlights the row) and `DiagramWrapper` (selects the node in GoJS). The flow is always: GoJS event → React state → React render → GoJS update.
+### Single source of truth: React state owns all data
 
-**Feedback-loop guard:** Without a guard, the selection sync creates an infinite loop. GoJS fires `ChangedSelection` → React sets `selectedId` → the `selectedId` effect runs → GoJS selects the node → GoJS fires `ChangedSelection` again → repeat. The guard is a single `isUpdatingFromDiagram` ref. The `ChangedSelection` handler sets it to `true` before calling `onSelectionChange` and back to `false` after. The `selectedId` effect checks it at the top and returns early if set, breaking the cycle.
+- `nodes`, `links`, `selectedId` in `GraphEditor` are canonical — GoJS is a controlled output
+- No separate GoJS-side model to sync manually; `NodeList` and `DiagramCanvas` both read from the same arrays
+- Data flow is always unidirectional: GoJS event → React state setter → React render → GoJS patch
 
 **Name edit sync: O(1) via `NamePatch`**
 
-Typing in the name field calls `handleNameChange(id, name)` which does two things in parallel:
+Typing in the name field calls `handleNameChange(id, name)`, which:
+1. Updates the `nodes` array in state — `NodeList` reflects the new name immediately
+2. Sets `namePatch: { id, name }` — a dedicated `DiagramCanvas` effect calls `diagram.model.setDataProperty()`, patching only that one node in GoJS
 
-1. Updates the `nodes` array in React state (so `NodeList` reflects the new name instantly).
-2. Sets a `namePatch: { id, name }` state (a lightweight object carrying just the changed key and value).
-
-`DiagramCanvas` has a dedicated effect on `namePatch` that calls `diagram.model.setDataProperty(nodeData, "name", namePatch.name)` — a single O(1) hash lookup into the GoJS model. Only the affected node re-renders in GoJS. The rest of the diagram is untouched.
-
-This avoids the naive alternative of replacing the entire `nodeDataArray` on every keystroke, which would cause GoJS to tear down and rebuild all node visuals.
-
-**Investigation: blocking ReactDiagram's `shouldComponentUpdate` during name patches**
-
-An attempt was made to add `skipsDiagramUpdate || namePatch !== null` when passing `skipsDiagramUpdate` to `ReactDiagram`, reasoning that if a targeted patch was already handling the GoJS update, the full `mergeData` path via `shouldComponentUpdate` could be skipped. This was rejected for two reasons:
-
-1. `namePatch !== null` is too broad — it would block ReactDiagram from updating for any reason while a patch is pending, including legitimate unrelated changes.
-2. `ReactDiagram.shouldComponentUpdate` already guards against redundant syncs by comparing `nodeDataArray` and `linkDataArray` by reference. The `mergeData` call that follows is fast when GoJS's internal model already reflects the change from the targeted patch. React DevTools profiling confirmed no unnecessary re-renders were occurring without the extra guard.
-
-Separately, clearing `namePatch` to `null` after each effect (via `setNamePatch(null)`) was also tried and rejected. It caused the namePatch effect to fire a second time with `null` as the value — an extra render and effect call with no benefit since the effect already guards with `if (!namePatch) return`.
-
-**Selection deferral: `startTransition` on canvas-driven selection**
-
-When the user clicks a node in the GoJS canvas, `handleChangedSelection` wraps `setSelectedId` in `startTransition`. The canvas selection highlight is handled by GoJS itself synchronously. The `selectedId` state update, which triggers `NodeList` to re-render and highlight the corresponding row, is lower priority and can be deferred. This keeps the canvas interaction feeling immediate even while 1000 list rows reconcile in the background.
+Avoids the naive alternative (replacing the entire `nodeDataArray` on each keystroke), which would cause GoJS to rebuild all node visuals.
 
 ---
 
 ## Performance Notes
 
-_(TBD — measured numbers from DevTools profiling once implementation is complete)_
+**Core Web Vitals:**
+
+| Metric | Local | Deployed | Threshold | Notes |
+|---|---|---|---|---|
+| LCP | 0.58 s | 0.35 s | < 2.5 s ✓ | LCP element is a MUI `Typography` node — app shell text paints fast even though GoJS initializes after |
+| CLS | 0 | 0 | < 0.1 ✓ | Loading overlay reserves the diagram area during GoJS init, preventing any layout shift when the canvas appears |
+| INP | 120 ms | 48 ms | < 200 ms ✓ | Measured on name field keystrokes — the most demanding interaction (state update + `NodeRow` re-render + `diagram.model.setDataProperty()` on every key). Individual keystrokes were 56–112 ms locally and 24–32 ms in production. |
+
+**Runtime feel (manual + React Profiler):**
+
+- Selection and name editing are instant with no perceptible hiccups.
+- React Profiler confirms no unnecessary re-renders: on each keystroke only the single `NodeRow` being edited re-renders. All other rows are skipped by `React.memo`.
+
+**Bundle size trade-offs:**
+
+- Production build: ~1,424 KB minified, ~407 KB gzipped.
+- Bundle visualizer shows two roughly equal halves: MUI + Emotion + React (~600 KB) and `gojs/release/go.mjs` (~800 KB).
+- GoJS ships as a single monolithic file and cannot be tree-shaken. Its size is fixed regardless of how much of the API is used.
+- MUI is already well tree-shaken — individual component files appear in the visualizer rather than a barrel import.
+- Code-splitting GoJS via dynamic `import()` + `React.lazy` was considered. It would reduce initial parse time but not download size. For this app the diagram is the entire UI — GoJS is needed on every load — so the gain would be parse time only, not time-to-diagram. With a `modulepreload` hint the difference would be negligible. The current single-bundle approach is simpler and the trade-off is accepted.
+- In a larger app where the GoJS diagram is one feature among many (e.g. behind a route), lazy-loading it would be a meaningful win — users who never visit the diagram page never pay the ~800 KB parse cost.
+
+---
 
 ## Testing Approach
 
@@ -213,79 +347,54 @@ _(TBD — measured numbers from DevTools profiling once implementation is comple
 
 | Concern | Choice | Reason |
 |---|---|---|
-| Runner | Jest 30 + ts-jest | Hard project requirement (NFR-7); Vitest and `bun test` are explicitly excluded |
-| Config file | `jest.config.cjs` (`.cjs` extension) | `"type": "module"` in `package.json` makes Node treat `.js` as ESM; the CommonJS extension avoids a parse error |
-| TS config | `tsconfig.test.json` | Separate file with `module: "CommonJS"` and `moduleResolution: "node"`. The app tsconfig uses `moduleResolution: "bundler"` which is Vite-specific and breaks ts-jest |
-| Canvas | `jest-canvas-mock` | GoJS uses `<canvas>` internally; jsdom provides no canvas implementation |
+| Runner | Jest 30 + ts-jest | Hard project requirement (NFR-7); Vitest and `bun test` explicitly excluded |
+| Config file | `jest.config.cjs` | `"type": "module"` in `package.json` makes Node treat `.js` as ESM; `.cjs` avoids a parse error |
+| TS config | `tsconfig.test.json` | Separate config with `module: "CommonJS"` and `moduleResolution: "node"` — the app tsconfig uses `"bundler"` resolution which breaks ts-jest |
+| Canvas | `jest-canvas-mock` | GoJS uses `<canvas>` internally; jsdom has no canvas implementation |
 | DOM matchers | `@testing-library/jest-dom` | Adds `toBeInTheDocument`, `toHaveValue`, etc. |
-| Command | `bunx jest` / `bunx jest --coverage` | Use the `test:coverage` script from `package.json` for a full coverage report |
 
 ### Three layers of tests
 
-**1. Pure unit tests**
+**1. Unit tests** — deterministic functions and component branches
 
-These tests cover small, deterministic functions and component branches with mocks where needed.
-
-- `src/utils/graphUtils.test.ts` exercises graph generation logic in isolation, including node counts, connectivity, and link uniqueness.
-- `src/components/node-row/index.test.tsx` checks row rendering and selection clicks.
-- `src/components/side-panel/index.test.tsx` verifies rendering states and name editing behavior with a real `useState` wrapper.
-- `src/components/drawer/index.test.tsx` checks the responsive switch between the persistent and permanent drawer variants.
-- `src/components/diagram-wrapper/index.test.tsx` covers the defensive listener branch when no GoJS diagram is available.
-
-Key cases:
-
-| File | Case |
+| File | Key cases |
 |---|---|
-| `graph-utils.test.ts` | 1 000-node graph has exactly 1 000 unique IDs |
-| `graph-utils.test.ts` | All link endpoints reference valid node IDs |
-| `graph-utils.test.ts` | No self-loops and no duplicate pairs in generated links |
-| `graph-utils.test.ts` | BFS from `n0` reaches all nodes (graph is connected) |
-| `graph-utils.test.ts` | `n=0` returns empty arrays without crashing |
-| `node-row/index.test.tsx` | Click calls `onSelect` with the node ID and sets `selectedFromList` to `true` |
-| `side-panel/index.test.tsx` | Shows placeholder when no node is selected or ID is absent from index |
-| `side-panel/index.test.tsx` | Typing in the name field calls `setNamePatch` with the updated name |
-| `side-panel/index.test.tsx` | Clearing the field calls `setNamePatch` with an empty string |
+| `graph-utils.test.ts` | 1000-node graph: exact count, unique IDs, valid link endpoints, no self-loops, no duplicate pairs, BFS connectivity, `n=0` edge case |
+| `node-row/index.test.tsx` | Click calls `onSelect` with node ID and sets `selectedFromList` to `true` |
+| `side-panel/index.test.tsx` | Placeholder when no selection; name field shows current name; typing calls `setNamePatch`; clearing field passes empty string |
+| `drawer/index.test.tsx` | Responsive switch between persistent and permanent variants |
+| `diagram-wrapper/index.test.tsx` | Defensive listener branch when no diagram is available |
 
-**2. DiagramCanvas unit tests**
-
-`src/components/diagram-canvas/index.test.tsx` covers the sync logic around GoJS and React. The suite uses a scoped mock of `DiagramWrapper` for the branch-heavy cases so the tests can verify selection sync, loop suppression, and no-diagram guards without depending on full diagram initialization.
-
-Key cases:
+**2. DiagramCanvas unit tests** — GoJS/React sync logic, using a scoped `DiagramWrapper` mock
 
 | Case |
 |---|
-| All provided nodes are rendered on load |
-| `ClickCreatingTool` inserts a new node into the diagram |
-| Self-loop link is rejected by the link validation rule |
-| Duplicate link between already-connected nodes is rejected |
-| Valid link between distinct, unconnected nodes is accepted |
-| Adding a link via the model increments `diagram.links.count` |
-| Does not crash when `selectedId` has no matching node in the diagram |
-| Selecting a node from React calls `diagram.select` and `diagram.centerRect`, then suppresses the next `ChangedSelection` event to prevent a feedback loop |
+| All provided nodes rendered on load |
+| `ClickCreatingTool` inserts a new node |
+| Self-loop rejected by link validation |
+| Duplicate link rejected |
+| Valid link accepted and increments `diagram.links.count` |
+| No crash when `selectedId` has no matching node |
+| Selecting from React calls `diagram.select` + `diagram.centerRect`, then suppresses the echo `ChangedSelection` |
 | Selection and name-patch effects return early when no diagram is mounted |
 
-**3. Integration test**
-
-`src/app.integration.test.tsx` renders the full `<App />` and verifies the canvas and side panel working together. The test suite now uses a small mocked graph fixture instead of the full generated graph, which keeps the integration tests fast and stable in CI.
-
-Key cases:
+**3. Integration tests** (`app.integration.test.tsx`) — full `<App />` with a small mocked graph fixture
 
 | Case |
 |---|
-| Mobile drawer opens from the trigger button and closes from the panel close button |
-| Selecting a node on the canvas highlights its row in the NodeList |
-| Adding a node on the canvas appends its row to the NodeList |
-| Editing a node name in the properties panel updates the node label in the diagram |
-| Drawing a link via `LinkingTool.insertLink()` syncs the new link into React state |
+| Drawer opens and closes via toggle button |
+| Canvas selection highlights the correct `NodeList` row |
+| Adding a canvas node appends its row to `NodeList` |
+| Name edit in properties panel updates the diagram label |
+| Drawing a link syncs the new link into React state |
 
-Key integration techniques:
+Key techniques:
+- **GoJS instance access** — `go.Diagram.fromDiv()` retrieves the live diagram from the DOM
+- **Timer flushing** — `jest.useFakeTimers()` + `jest.runOnlyPendingTimers()` lets GoJS finish initialization before assertions
+- **Tool API** — tests drive GoJS via tool APIs and `diagram.select()`, not canvas pointer events (jsdom cannot simulate those)
+- **Responsive checks** — `window.matchMedia` mocked for drawer behavior testing
 
-- **GoJS instance access** — `go.Diagram.fromDiv()` retrieves the live diagram from the DOM.
-- **Timer flushing** — `jest.useFakeTimers()` and `jest.runOnlyPendingTimers()` let GoJS finish initialization before assertions run.
-- **Tool API** — the tests drive GoJS behavior through the diagram tool APIs and `diagram.select(...)` instead of canvas pointer events, which jsdom cannot simulate reliably.
-- **Responsive checks** — `window.matchMedia` is mocked so drawer behavior can be tested in mobile and desktop modes.
-
-### Coverage results
+### Coverage
 
 ```
 Statements   : 98.43% (252/256)
@@ -294,14 +403,13 @@ Functions    : 98.00% (49/50)
 Lines        : 98.74% (236/239)
 ```
 
-**Remaining gaps and why they are acceptable:**
+Remaining branch gaps are defensive paths (`isAppNode`, `isAppLink`, `findNodeForKey`, `instanceof go.Diagram` checks) that are covered at the line level but not all false-branches are exercised in happy-path tests.
 
-- `diagram-canvas` still has a handful of uncovered branches in the selection and model-sync guards. The lines are covered, but the defensive paths around `isAppNode`, `isAppLink`, `findNodeForKey`, and `nodeData` existence are not all taken in every case.
-- `diagram-wrapper` still has uncovered listener-registration branches around the `instanceof go.Diagram` checks in mount and cleanup. The component is exercised, but the defensive false paths are not taken in the happy-path tests.
+---
 
 ## AI Disclosure
 
-_(TBD — to be written last with specific examples of what was generated, modified, rejected, and verified)_
+_(TBD)_
 
 ## Trade-offs / What I'd Do Next
 

@@ -1,7 +1,7 @@
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import { styled } from "@mui/material/styles";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import type { AppLink, AppNode } from "../../types/graph";
 import type { NamePatch } from "../../types/graph-editor";
 import { GENERATED_GRAPH } from "../../utils/graph-utils";
@@ -47,9 +47,9 @@ export const GraphEditor = () => {
   const [isLoading, setIsLoading] = useState(true);
   const { nodeIndexRef, linkIndexRef } = useGraphIndexRefs(nodes, links);
 
-  const handleInitialLayoutCompleted = useCallback(() => {
+  const handleInitialLayoutCompleted = () => {
     setIsLoading(false);
-  }, []);
+  };
 
   const handleOpen = () => {
     setDrawerExited(false);
