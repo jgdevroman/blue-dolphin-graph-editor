@@ -210,6 +210,184 @@ describe("DiagramCanvas — Integration Tests (Shared App Instance)", () => {
   });
 
   // ──────────────────────────────────────────────────────
+  // List selection → canvas selection
+  // ──────────────────────────────────────────────────────
+
+  describe("list selection → canvas selection", () => {
+    it("clicking a node row selects the GoJS node and centers the viewport on it", async () => {
+      const { diagram } = renderAppWithDiagram();
+      await waitFor(() => {
+        expect(diagram.nodes.count).toBeGreaterThan(0);
+      });
+
+      const centerRectSpy = jest.spyOn(diagram, "centerRect");
+      const user = userEvent.setup();
+
+      const nodeId = "n1";
+      const listItem = document.querySelector(`[data-node-id="${nodeId}"]`);
+      const button = listItem?.querySelector(".MuiListItemButton-root") as HTMLElement;
+      await user.click(button);
+
+      await waitFor(() => {
+        const selected = diagram.selection.first();
+        expect(selected).not.toBeNull();
+        expect(String(selected?.key)).toBe(nodeId);
+      });
+      expect(centerRectSpy).toHaveBeenCalled();
+      centerRectSpy.mockRestore();
+    });
+  });
+
+  // ──────────────────────────────────────────────────────
+  // Unselect then add node → list highlights and scrolls
+  // ──────────────────────────────────────────────────────
+
+  describe("unselect then add node → list highlights and scrolls to new node", () => {
+    it("after deselecting all nodes, creating a node highlights it in the list and scrolls to it", async () => {
+      const scrollIntoViewSpy = jest
+        .spyOn(Element.prototype, "scrollIntoView")
+        .mockImplementation(jest.fn());
+
+      const { diagram } = renderAppWithDiagram();
+      await waitFor(() => {
+        expect(diagram.nodes.count).toBeGreaterThan(0);
+      });
+
+      const iter = diagram.nodes;
+      iter.next();
+      const firstNode = iter.value as go.Node;
+
+      act(() => {
+        diagram.select(firstNode);
+      });
+      await waitFor(() => {
+        expect(diagram.selection.count).toBe(1);
+      });
+
+      act(() => {
+        diagram.clearSelection();
+      });
+      await waitFor(() => {
+        expect(diagram.selection.count).toBe(0);
+      });
+      scrollIntoViewSpy.mockClear();
+
+      act(() => {
+        const tool = diagram.toolManager.clickCreatingTool;
+        tool.doActivate();
+        tool.insertPart(new go.Point(5000, 5000));
+        tool.doStop();
+      });
+
+      await waitFor(() => {
+        const buttons = document.querySelectorAll(".MuiListItemButton-root");
+        const selected = Array.from(buttons).find((b) =>
+          b.classList.contains("Mui-selected"),
+        );
+        expect(selected).toBeDefined();
+        expect(selected?.textContent).toContain("New Node");
+      });
+      expect(scrollIntoViewSpy).toHaveBeenCalled();
+      scrollIntoViewSpy.mockRestore();
+    });
+  });
+
+  // ──────────────────────────────────────────────────────
+  // Add link then canvas selection → list highlights and scrolls
+  // ──────────────────────────────────────────────────────
+
+  describe("add link then canvas selection → list highlights and scrolls", () => {
+    it("selecting a node on the canvas after creating a link highlights the row and scrolls to it", async () => {
+      const scrollIntoViewSpy = jest
+        .spyOn(Element.prototype, "scrollIntoView")
+        .mockImplementation(jest.fn());
+
+      const { diagram } = renderAppWithDiagram();
+      await waitFor(() => {
+        expect(diagram.links.count).toBeGreaterThan(0);
+      });
+
+      const fromNode = diagram.findNodeForKey("n1") as go.Node;
+      const toNode = diagram.findNodeForKey("n3") as go.Node;
+      act(() => {
+        diagram.toolManager.linkingTool.insertLink(
+          fromNode,
+          fromNode.port,
+          toNode,
+          toNode.port,
+        );
+      });
+      await waitFor(() => {
+        expect(diagram.links.count).toBeGreaterThan(2);
+      });
+      scrollIntoViewSpy.mockClear();
+
+      const nodeToSelect = diagram.findNodeForKey("n2") as go.Node;
+      act(() => {
+        diagram.select(nodeToSelect);
+      });
+
+      await waitFor(() => {
+        const listItem = document.querySelector(`[data-node-id="n2"]`);
+        const button = listItem?.querySelector(".MuiListItemButton-root");
+        expect(button).toHaveClass("Mui-selected");
+      });
+      expect(scrollIntoViewSpy).toHaveBeenCalled();
+      scrollIntoViewSpy.mockRestore();
+    });
+  });
+
+  // ──────────────────────────────────────────────────────
+  // Add link then add node → list highlights and scrolls
+  // ──────────────────────────────────────────────────────
+
+  describe("add link then add node → list highlights and scrolls to new node", () => {
+    it("creating a node after creating a link highlights the new row and scrolls to it", async () => {
+      const scrollIntoViewSpy = jest
+        .spyOn(Element.prototype, "scrollIntoView")
+        .mockImplementation(jest.fn());
+
+      const { diagram } = renderAppWithDiagram();
+      await waitFor(() => {
+        expect(diagram.links.count).toBeGreaterThan(0);
+      });
+
+      const fromNode = diagram.findNodeForKey("n1") as go.Node;
+      const toNode = diagram.findNodeForKey("n3") as go.Node;
+      act(() => {
+        diagram.toolManager.linkingTool.insertLink(
+          fromNode,
+          fromNode.port,
+          toNode,
+          toNode.port,
+        );
+      });
+      await waitFor(() => {
+        expect(diagram.links.count).toBeGreaterThan(2);
+      });
+      scrollIntoViewSpy.mockClear();
+
+      act(() => {
+        const tool = diagram.toolManager.clickCreatingTool;
+        tool.doActivate();
+        tool.insertPart(new go.Point(5000, 5000));
+        tool.doStop();
+      });
+
+      await waitFor(() => {
+        const buttons = document.querySelectorAll(".MuiListItemButton-root");
+        const selected = Array.from(buttons).find((b) =>
+          b.classList.contains("Mui-selected"),
+        );
+        expect(selected).toBeDefined();
+        expect(selected?.textContent).toContain("New Node");
+      });
+      expect(scrollIntoViewSpy).toHaveBeenCalled();
+      scrollIntoViewSpy.mockRestore();
+    });
+  });
+
+  // ──────────────────────────────────────────────────────
   // Name patch sync via UI
   // ──────────────────────────────────────────────────────
 

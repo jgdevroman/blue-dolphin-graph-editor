@@ -35,32 +35,7 @@ export const DiagramCanvas = ({
   // This ref is used to prevent loops between GoJS-driven selection changes and React-driven selectedId state.
   const suppressNextSelectionEventRef = useRef(false);
 
-  /**
-   * Handles ChangedSelection events from GoJS, pushing the selected node id into React
-   * state to update the side panel's selected node.
-   */
-  const handleChangedSelection = (e: go.DiagramEvent) => {
-    // if the selection change originated from React pushing selectedId into GoJS, do not update React state again and cause a loop.
-    if (suppressNextSelectionEventRef.current) {
-      suppressNextSelectionEventRef.current = false;
-      setSkipsDiagramUpdate(false);
-      return;
-    }
-
-    setSkipsDiagramUpdate(true);
-    suppressNextSelectionEventRef.current = true;
-    const firstSelected = e.subject.first();
-    // to make the selection feel snappier, give the selectedId update lower priority so that it does not block the canvas when the node is being dragged around.
-    setSelectedId(
-      firstSelected instanceof go.Node ? String(firstSelected.key) : null,
-    );
-  };
-
-  /**
-   * Handles GoJS model changes for node/link insertions created by built-in GoJS tools
-   * (ClickCreatingTool for nodes, LinkingTool for links). Syncs new data into React state
-   * and sets skipsDiagramUpdate so ReactDiagram does not push the data back into GoJS.
-   */
+  // Handles GoJS model changes for node/link insertions created by built-in GoJS tools (ClickCreatingTool for nodes, LinkingTool for links). Syncs new data into React state and sets skipsDiagramUpdate so ReactDiagram does not push the data back into GoJS.
   const handleModelChange = (obj: go.IncrementalData, _: go.ChangedEvent) => {
     const modifiedNodeMap = new Map<string, AppNode>();
     obj.modifiedNodeData?.forEach((nodeData) => {
@@ -77,6 +52,8 @@ export const DiagramCanvas = ({
         }
         nodeIndexRef.current.set(nodeData.id, nodeIndexRef.current.size);
         setNodes((prev) => [...prev, nodeData]);
+        // Don't suppress selection events when a node is created so that the new node gets selected and the side panel opens for it.
+        suppressNextSelectionEventRef.current = false;
       }
     });
 
@@ -95,10 +72,30 @@ export const DiagramCanvas = ({
         }
         linkIndexRef.current.set(linkData.id, linkIndexRef.current.size);
         setLinks((prev) => [...prev, linkData]);
+        // Don't suppress selection events when a link is created
+        suppressNextSelectionEventRef.current = false;
       }
     });
 
     setSkipsDiagramUpdate(true);
+  };
+
+  // Handles ChangedSelection events from GoJS, pushing the selected node id into React state to update the side panel's selected node.
+  const handleChangedSelection = (e: go.DiagramEvent) => {
+    // if the selection change originated from React pushing selectedId into GoJS, do not update React state again and cause a loop.
+    if (suppressNextSelectionEventRef.current) {
+      suppressNextSelectionEventRef.current = false;
+      setSkipsDiagramUpdate(false);
+      return;
+    }
+
+    setSkipsDiagramUpdate(true);
+    suppressNextSelectionEventRef.current = true;
+    const firstSelected = e.subject.first();
+    // to make the selection feel snappier, give the selectedId update lower priority so that it does not block the canvas when the node is being dragged around.
+    setSelectedId(
+      firstSelected instanceof go.Node ? String(firstSelected.key) : null,
+    );
   };
 
   // Push selectedId from React into GoJS, skipping when GoJS drove the change.
@@ -116,9 +113,10 @@ export const DiagramCanvas = ({
     if (selectedId === null) {
       diagram.clearSelection();
     } else {
+      setSkipsDiagramUpdate(true);
+      suppressNextSelectionEventRef.current = true;
       const node = diagram.findNodeForKey(selectedId);
       if (node) {
-        suppressNextSelectionEventRef.current = true;
         diagram.select(node);
         diagram.centerRect(node.actualBounds);
       }
