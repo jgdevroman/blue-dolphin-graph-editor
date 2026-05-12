@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { AppLink, AppNode } from "../../../types/graph";
 
 const buildIndexMap = <T extends { id: string }>(items: T[]) => {
@@ -12,13 +12,17 @@ const buildIndexMap = <T extends { id: string }>(items: T[]) => {
 export const useGraphIndexRefs = (nodes: AppNode[], links: AppLink[]) => {
   const nodeIndexRef = useRef<Map<string, number>>(new Map());
   const linkIndexRef = useRef<Map<string, number>>(new Map());
+  const isInitialized = useRef(false);
 
-  // On mount, populate the node/link index refs with the initial data.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: needs to run only once on mount. The refresh functions are stable and do not need to be included in the dependency array.
-  useEffect(() => {
+  // Synchronous lazy initialization: must run during the render phase, before any effects.
+  // gojs-react (a class component) fires onModelChange from componentDidMount, which runs
+  // before useEffect hooks. Initializing in useEffect leaves nodeIndexRef empty during that
+  // window, causing handleModelChange to bypass the has() guard and duplicate all initial nodes.
+  if (!isInitialized.current) {
+    isInitialized.current = true;
     nodeIndexRef.current = buildIndexMap(nodes);
     linkIndexRef.current = buildIndexMap(links);
-  }, []);
+  }
 
   return { nodeIndexRef, linkIndexRef };
 };
