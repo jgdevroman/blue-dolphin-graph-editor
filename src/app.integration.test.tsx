@@ -225,7 +225,9 @@ describe("DiagramCanvas — Integration Tests (Shared App Instance)", () => {
 
       const nodeId = "n1";
       const listItem = document.querySelector(`[data-node-id="${nodeId}"]`);
-      const button = listItem?.querySelector(".MuiListItemButton-root") as HTMLElement;
+      const button = listItem?.querySelector(
+        ".MuiListItemButton-root",
+      ) as HTMLElement;
       await user.click(button);
 
       await waitFor(() => {
