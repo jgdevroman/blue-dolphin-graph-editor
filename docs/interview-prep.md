@@ -86,17 +86,44 @@ Costs:
 - Edge cases: when the list is shorter than the viewport both sentinels are always visible, causing the window to continuously shift. Requires a guard on total vs visible count.
 - More moving parts: two sentinel refs, observer lifecycle, re-observe after each window shift, cleanup on unmount.
 
+### Option C: Lazy mounting (IntersectionObserver per row)
+
+How it works:
+
+```
+each row renders a shell div with a fixed height placeholder
+IntersectionObserver watches each shell div
+onIntersect: set mounted = true → replace placeholder with real NodeRow
+never unmount — rows accumulate in the DOM permanently
+```
+
+Wins:
+
+- Simpler than windowing — no spacer math, no scrollTop arithmetic, no window index state.
+- Ctrl+F and screen readers work correctly for all rows that have been scrolled past at least once.
+- Natural fit for variable-height rows — no `ROW_HEIGHT` constant needed.
+
+Costs:
+
+- All n shell divs exist in the DOM from the start. DOM node count is O(n), same as no virtualization. Only the render cost of the real row content is deferred.
+- Memory grows monotonically — rows mount and never release. For very large lists this is worse than windowing.
+- First-render cost is still O(n) for the wrapper shells. Windowing is O(viewport).
+- Not useful for the "scroll to selected" case — the target row may not be mounted yet, requiring an async wait after the observer fires.
+
+When to use it: lists of a few hundred items where accessibility and simplicity matter more than true O(viewport) DOM cost.
+
 **Comparison table:**
 
-| | Scroll event | IntersectionObserver |
-|---|---|---|
-| Update timing | Synchronous with scroll | Async, fires after paint |
-| Blank flash on fast scroll | None | Yes |
-| Fixed-height rows | Perfect fit | Overkill |
-| Variable-height rows | Breaks without measurement | Natural fit |
-| Scroll-to-selected | One line | Two async steps |
-| Main-thread cost | Per-frame compute (throttled) | Only on boundary cross |
-| Recommendation | Yes, for this case | No |
+| | Scroll event | IntersectionObserver sentinels | Lazy mounting |
+|---|---|---|---|
+| Update timing | Synchronous with scroll | Async, fires after paint | Async, fires after paint |
+| Blank flash on fast scroll | None | Yes | None (shells hold layout) |
+| DOM size | O(viewport) | O(viewport) | O(n) — grows, never shrinks |
+| Fixed-height rows | Perfect fit | Overkill | Works |
+| Variable-height rows | Breaks without measurement | Natural fit | Natural fit |
+| Scroll-to-selected | One line | Two async steps | Async — target may not be mounted |
+| Ctrl+F / screen readers | Broken for off-screen rows | Broken for off-screen rows | Works after first scroll-past |
+| Recommendation | Yes, for this case | No | No (too many nodes) |
 
 **The senior move:** "I'd build it myself per the PRD constraint. Scroll-event windowing with `requestAnimationFrame` throttling, `paddingTop`/`paddingBottom` spacers for scrollbar geometry, and a `ResizeObserver` for panel resizes. Fixed-height first because `ListItemText` with name + type is bounded. The interesting integration point is `node-list/index.tsx:25` — my `scrollIntoView` for selected nodes has to become a `scrollTo(index * rowHeight)` that also updates `windowStart` state immediately so the target row is mounted before the browser paints."
 
