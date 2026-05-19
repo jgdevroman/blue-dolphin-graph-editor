@@ -65,7 +65,7 @@ export const SidePanel = ({
       <Box
         sx={{
           flex: "1 1 auto",
-          overflow: "auto",
+          overflow: "hidden",
           display: "flex",
           flexDirection: "column",
         }}
@@ -103,7 +103,7 @@ export const SidePanel = ({
             ✕
           </IconButton>
         </Box>
-        <NodeList nodes={nodes} selectedId={selectedId} onSelect={onSelect} />
+        <NodeList nodes={nodes} nodeIndexRef={nodeIndexRef} selectedId={selectedId} onSelect={onSelect} />
       </Box>
 
       <Box sx={{ flex: "0 0 auto", borderTop: 1, borderColor: "divider" }}>

@@ -9,14 +9,15 @@ export type NodeRowProps = {
   isSelected: boolean;
   onSelect: (id: string) => void;
   setSelectedFromList: React.Dispatch<React.SetStateAction<boolean>>;
+  ariaRowIndex: number;
 };
 
 export const NodeRow = memo(
-  ({ node, isSelected, onSelect, setSelectedFromList }: NodeRowProps) => (
+  ({ node, isSelected, onSelect, setSelectedFromList, ariaRowIndex }: NodeRowProps) => (
     <ListItem
       disablePadding
       data-node-id={node.id}
-      sx={{ contentVisibility: "auto", containIntrinsicSize: "0 48px" }}
+      aria-rowindex={ariaRowIndex}
     >
       <ListItemButton
         selected={isSelected}
