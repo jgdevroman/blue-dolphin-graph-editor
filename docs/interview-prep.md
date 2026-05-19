@@ -127,7 +127,17 @@ The integration tests call `diagram.select(node)`, `tool.insertPart(...)`, `link
 
 **Own it cleanly:**
 
-> "These are integration tests against the GoJS programmatic API, not user flows. They validate the sync wiring — model change → React state → DOM — which was the highest-risk area. They wouldn't catch a regression where double-click on the canvas stops creating a node, or drag-from-port stops drawing a link, because no real pointer event ever fires."
+> "The core integration tests drive GoJS directly — `tool.insertPart`, `model.addLinkData` — which validates the sync wiring between GoJS and React state. That was the highest-risk area. On top of that we have Robot tests: the double-click test is fully faithful because `ClickCreatingTool` activates through the real ToolManager path with no stubs. The drag test exercises the LinkingTool wiring but has to stub `findPartAt` because jsdom has no real canvas geometry — so a regression in port hit-detection wouldn't be caught. For that last gap you need jest-puppeteer or Playwright against a real browser."
+
+**Why the main test suite doesn't use Robot:**
+
+Three concrete reasons, not a gap we missed:
+
+1. **The GoJS npm package doesn't ship extensions.** `node_modules/gojs/release/` contains only the compiled library. There is no `extensions/Robot.ts` to copy — we had to write it from scratch against the type definitions. That's non-trivial vendored code that needs to be maintained across GoJS upgrades.
+
+2. **Robot doesn't close the drag coverage gap.** For the double-click case, `tool.insertPart()` in the existing tests exercises the exact same code path (`ClickCreatingTool` inserting a node into the model) with no extra setup. Robot adds nothing there. For the drag case, Robot in jsdom still requires three manual workarounds because `findPartAt` always returns null — the test ends up being a wiring test with stubs, not a user-flow test. The workarounds are in `robot.demo.test.tsx` as a demonstration.
+
+3. **The highest-risk area was always the sync wiring, not the input path.** The real danger was GoJS model changes not propagating to React state, or React state re-renders corrupting the GoJS model. The programmatic API tests cover that precisely and deterministically. A Robot-driven test would exercise the same wiring through more machinery, adding noise without adding signal for that specific risk.
 
 **What real user-flow tests would need:**
 
@@ -135,7 +145,85 @@ The integration tests call `diagram.select(node)`, `tool.insertPart(...)`, `link
 - **Playwright or Cypress component tests** for the truth. jsdom has no canvas, no real layout, no real hit testing. The integration test for "drag from node A's port to node B's port creates a link" is fundamentally a browser test — you need real coordinates, real pointer capture, and real GoJS hit-testing against laid-out geometry.
 - **Testing pyramid argument:** Jest stays for pure logic (graph utils, reducers, the model-change handler in isolation). Browser-level E2E covers the canvas interactions GoJS owns. Don't try to make jsdom do something it can't.
 
-**Bonus credibility:** "There's also a coverage gap on failure paths — `linkValidation` rejecting self-links and duplicate edges in `diagram-wrapper/index.tsx:82` has no test. The review said 'not only happy paths' — that's the obvious one I'd add first, and it can be a Jest test because it's a pure predicate."
+**GoJS Robot in Jest vs real browser — concrete tradeoffs (from actually building it):**
+
+| | Robot in Jest (jsdom) | Robot in real browser (Playwright/Cypress) |
+|---|---|---|
+| `dblClick` → node created | Works. `ClickCreatingTool` activates correctly through `ToolManager.doMouseDown` without hit-testing. | Works, and also validates real double-click timing and canvas focus. |
+| Drag port → link created | Requires three manual workarounds (see below). | Works end-to-end with zero workarounds. |
+| CI speed | ~1 s per suite, no browser binary | 5–30 s per suite, needs browser installed |
+| Flakiness | Deterministic | Possible timing flakes on slow CI |
+| Catches real regressions | Tool-activation logic only | Full stack: layout, hit-testing, event capture |
+
+The three workarounds needed to make Robot + drag work in jsdom:
+
+1. **`doActivate` must be bypassed.** `LinkingTool.doActivate()` calls `findFromPort` internally, which uses `diagram.findPartAt()`. In jsdom there is no real canvas so `findPartAt` always returns null and the tool deactivates silently. Fix: set `linkingTool.isActive = true` directly and seed `originalFromNode`/`originalFromPort` manually.
+
+2. **`findTargetPort` must be overridden.** `doMouseUp` calls `findTargetPort` to resolve the destination, which again uses `findPartAt`. Fix: override the method on the instance — `linkingTool.findTargetPort = () => portB` — so it returns the target port directly.
+
+3. **Event dispatch must target the active tool directly.** `ToolManager.doMouseMove/Up` iterate the tool-start lists looking for a new tool to activate. They do not forward to an already-active tool. Once `LinkingTool` is the `diagram.currentTool`, Robot must call `diagram.currentTool.doMouseMove/Up()` instead of going through the ToolManager. This is a fundamental difference from how the GoJS Robot extension is often naively implemented.
+
+**Does the Robot simulate real browser interactions?**
+
+No. Even the official Robot implementation does not simulate real browser interactions. It simulates GoJS-level interactions. The distinction matters for understanding what these tests actually cover.
+
+What Robot does:
+
+- Constructs `go.InputEvent` objects in memory
+- Calls `diagram.currentTool.doMouseDown/Move/Up()` directly
+- Bypasses the entire DOM event pipeline — no `MouseEvent`, no pointer capture, no canvas hit-testing
+
+What a real browser does on a drag:
+
+1. DOM fires `mousedown` on the `<canvas>` element
+2. Browser performs pointer capture
+3. GoJS's canvas event listener receives it and calls `diagram.doMouseDown()`
+4. GoJS calls `diagram.findPartAt(viewPoint)` using real canvas geometry to find which node/port is under the cursor
+5. ToolManager decides which tool to activate based on what was hit
+6. Steps 3-5 repeat for `mousemove` and `mouseup`
+
+Steps 4 and 5 are the wall. `findPartAt` requires real rendered canvas geometry. jsdom cannot provide it. The drag test's three workarounds skip steps 4 and 5 entirely — we manually inject their results rather than exercising them.
+
+| What it covers | Robot in Jest | Real browser |
+|---|---|---|
+| Tool activation logic | Yes | Yes |
+| GoJS model mutations | Yes | Yes |
+| React state sync | Yes | Yes |
+| Canvas hit-testing (`findPartAt`) | No — stubbed out | Yes |
+| Real DOM event dispatch | No | Yes |
+| Port detection on drag start | No — manually seeded | Yes |
+| Port detection on drag end | No — instance override | Yes |
+| Layout-dependent coordinates | No | Yes |
+
+The double-click test is genuinely useful — `ClickCreatingTool` activates through the real ToolManager path with no stubs. The drag test is a wiring test dressed up as a user-flow test: it proves the `LinkingTool` creates a link when handed a valid target port, not that a user can actually drag between two nodes.
+
+**The honest framing for the interview:** "We did implement the Robot tests and they pass. The double-click test is faithful — ToolManager.doMouseDown runs exactly as it would in a browser. The drag test is 90% faithful but the hit-testing layer is stubbed. A regression in `findFromPort` or `findTargetPort` would not be caught. For that, you need a real browser."
+
+**Browser testing options — jest-puppeteer vs Playwright:**
+
+If NFR-7 ("Jest — hard requirement") is interpreted strictly, jest-puppeteer is the right escape hatch: it runs Chromium under Jest, satisfies the constraint, and eliminates all three jsdom workarounds because `findPartAt` works against a real canvas.
+
+| | jest-puppeteer | Playwright |
+|---|---|---|
+| Test runner | Jest (NFR-7 compliant) | Separate runner, separate config |
+| Canvas hit-testing | Real Chromium, works | Real browser, works |
+| Robot drag test workarounds | None needed | None needed |
+| Dev server required | Yes — `globalSetup` must start `bun run dev` | Yes, or use component testing mode |
+| Test authoring | `page.evaluate(() => ...)` serialization boundary — can't import TS modules directly | Full TS imports, `page.locator`, component mount API |
+| Diagram access in tests | `go.Diagram.fromDiv(document.querySelector('.diagram-canvas'))` inside `evaluate` | Same, or via exposed handles |
+| Type safety | Needs `@types/puppeteer`; version conflicts are common | First-class TS support out of the box |
+| Mouse input | `page.mouse.down/move/up` (real DOM events) or GoJS Robot via `evaluate` | `page.mouse.down/move/up` (real DOM events) |
+| Ecosystem momentum | Maintenance mode | Actively developed, wider adoption |
+
+The `page.evaluate()` serialization wall is the main friction point with jest-puppeteer. Any code that touches the diagram must be expressed as a self-contained function string executed in browser context — you cannot pass TypeScript class instances or import project modules across the boundary. For simple assertions (`diagram.nodes.count`) this is fine. For complex setup (seeding nodes, pinning positions, accessing React state) it becomes verbose.
+
+**The recommended split for this codebase:**
+
+- Jest (jsdom) for all unit and tool-activation tests — fast, deterministic, no browser binary.
+- jest-puppeteer if the team interprets NFR-7 as "Jest only" — adds real browser for the two canvas interaction tests with minimal runner change.
+- Playwright if NFR-7 allows a second runner — better ergonomics for complex setup, better long-term maintainability.
+
+**Interview line:** "jest-puppeteer is the pragmatic middle ground if we're locked into Jest. The serialization boundary is annoying but manageable for the two tests we actually need a browser for. If we have flexibility on the runner, Playwright's component testing mode is cleaner — you get full TypeScript and can mount the React component directly rather than navigating to a served URL."
 
 ---
 

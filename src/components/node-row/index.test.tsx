@@ -16,6 +16,7 @@ describe("NodeRow — click handler", () => {
         isSelected={false}
         onSelect={onSelect}
         setSelectedFromList={setSelectedFromList}
+        ariaRowIndex={1}
       />,
     );
 
@@ -32,6 +33,7 @@ describe("NodeRow — click handler", () => {
         isSelected={false}
         onSelect={jest.fn()}
         setSelectedFromList={jest.fn()}
+        ariaRowIndex={1}
       />,
     );
 
